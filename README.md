@@ -1,22 +1,29 @@
-# 🚁 Drone Rescue — Cours Python débutant
+# 🚁 Drone Rescue — Cours Python
 
-> Projet pédagogique sur 6 semaines · Python 3.10+ · Console ASCII
+> Projet pédagogique : apprendre Python en construisant un jeu de simulation de sauvetage par drones, jouable en console.
 
 ## Présentation
 
-Drone Rescue est un jeu de plateau en console où des drones doivent secourir des survivants dispersés sur une grille, en évitant des tempêtes et des zones dangereuses.
+Drone Rescue est un jeu au tour par tour en console. Des drones doivent secourir des survivants dispersés sur une grille, malgré des tempêtes et des zones dangereuses.
 
-Ce repo contient :
-- **Un cours progressif** (9 modules + annexe) du niveau débutant jusqu'au projet complet
-- **Des exercices** par module avec énoncés, références et corrigés séparés
-- **Le jeu complet** prêt à jouer
+Ce repository contient **le cours complet** (9 modules), **les exercices** (avec références et prompts IA), **les corrections** et **le code final jouable**.
+
+## Structure
+
+```
+drone-rescue-python/
+├── cours/                  ← fiches de cours Markdown (modules 00 à 09)
+├── exercices/              ← énoncés Python commentés
+├── corrections/            ← corrigés (à ouvrir seulement après avoir essayé)
+├── jeu/                    ← code final complet et jouable
+└── README.md
+```
 
 ## Prérequis
 
-```
-Python 3.10 ou supérieur
-Aucune bibliothèque externe requise (stdlib uniquement)
-```
+- Python 3.10 ou supérieur
+- Terminal (PowerShell, bash, zsh…)
+- Aucune bibliothèque externe — stdlib uniquement (`random`, `os`, `re`, `pathlib`)
 
 ## Lancer le jeu
 
@@ -25,73 +32,39 @@ cd jeu
 python main.py
 ```
 
-## Structure du repo
+## Plan du cours (6 semaines)
 
-```
-drone-rescue-python/
-│
-├── README.md
-├── cours/
-│   ├── 00_introduction.md
-│   ├── 01_structures_de_base.md
-│   ├── 02_boucles_et_conditions.md
-│   ├── 03_fonctions.md
-│   ├── 04_modules_et_io.md
-│   ├── 05_classes_et_objets.md
-│   ├── 06_grille_et_affichage.md
-│   ├── 07_logique_de_jeu.md
-│   ├── 08_console_et_log.md
-│   └── 09_assemblage_final.md
-│
-├── exercices/
-│   ├── ex_01_structures.py
-│   ├── ex_02_boucles.py
-│   ├── ex_03_fonctions.py
-│   ├── ex_04_io.py
-│   ├── ex_05_classes.py
-│   ├── ex_06_grille.py
-│   ├── ex_07_logique.py
-│   └── ex_08_console.py
-│
-├── corrections/
-│   ├── corr_01_structures.py
-│   ├── corr_02_boucles.py
-│   ├── corr_03_fonctions.py
-│   ├── corr_04_io.py
-│   ├── corr_05_classes.py
-│   ├── corr_06_grille.py
-│   ├── corr_07_logique.py
-│   └── corr_08_console.py
-│
-└── jeu/
-    ├── config.py
-    ├── modeles.py
-    ├── affichage.py
-    ├── console.py
-    ├── logique.py
-    ├── logger.py
-    └── main.py
-```
+| Semaine | Module | Thème |
+|---------|--------|-------|
+| 1 | 01 | Structures de base — variables, listes, dicts |
+| 1 | 02 | Boucles et conditions |
+| 2 | 03 | Fonctions |
+| 2 | 04 | Modules et I/O fichiers |
+| 3 | 05 | Classes et objets |
+| 3 | 06 | Grille et affichage ASCII |
+| 4 | 07 | Logique de jeu |
+| 5 | 08 | Console et log |
+| 6 | 09 | Assemblage final (annexe) |
 
-## Feuille de route 6 semaines
+## Conventions du repo
 
-| Semaine | Modules | Objectif |
-|---------|---------|----------|
-| 1 | 00 + 01 | Prise en main Python, structures de données |
-| 2 | 02 + 03 | Boucles, conditions, fonctions |
-| 3 | 04 + 05 | Modules, I/O fichiers, classes |
-| 4 | 06 + 07 | Grille ASCII, logique de jeu |
-| 5 | 08 | Console interactive, historique |
-| 6 | 09 | Assemblage final, tests, rendu |
+- Les **énoncés** sont dans `exercices/` — ils contiennent les instructions mais pas les solutions.
+- Les **corrections** sont dans `corrections/` — ne les ouvrir qu'après avoir tenté l'exercice.
+- Chaque fichier de cours contient des **tips**, **best practices**, **références** et **prompts IA** pour aller plus loin.
 
 ## Règles du jeu (résumé)
 
-- **Drones** (D1–D6) : se déplacent en diagonal, transportent des survivants vers l'hôpital
-- **Tempêtes** (T1–T4) : bloquent les drones 2 tours, se déplacent (pas sur l'hôpital)
-- **Zones dangereuses** : se propagent tous les 2 tours (pas en diagonal, pas sur bâtiment/hôpital)
-- **Batterie** : max paramétrable (défaut 20), charge initiale paramétrable (défaut 10)
-- **Fin de partie** : tous les survivants secourus OU drones tous HS
+| Paramètre | Valeur par défaut | Modifiable |
+|-----------|-------------------|------------|
+| Taille grille | 12×12 | `config.py` |
+| Drones | 6 | `config.py` |
+| Tempêtes | 4 | `config.py` |
+| Bâtiments | 20 | `config.py` |
+| Batterie max | 20 | `config.py` |
+| Batterie initiale | 10 | `config.py` |
+| Déplacements/tour (drone) | 3 max | `config.py` |
+| Déplacements/tour (tempête) | 2 max | `config.py` |
+| Probabilité propagation | 0.3 | `config.py` |
+| Tours max | 20 | `config.py` |
 
-## Licence
-
-MIT — usage libre pour apprentissage et enseignement.
+**Fin de partie :** tous les survivants sauvés OU nombre de tours épuisé.
