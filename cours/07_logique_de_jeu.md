@@ -1,200 +1,343 @@
 # Module 07 — Logique de jeu
 
-## Concepts couverts
+> **Fil rouge :** `logique.py` contient toutes les règles du jeu.
+> À la fin de ce module, tu sauras valider un mouvement, exécuter ses effets,
+> gérer les règles de batterie et comprendre la séparation validation/exécution.
 
-- Architecture MVC légère (Modèle / Vue / Contrôleur)
-- Gestion d'état global
-- Validation de mouvement avec règles composées
-- Propagation stochastique (probabilité)
-- Conditions de fin de partie
+---
 
-## Règles du jeu à implémenter
+## 1. Principe : séparer validation et exécution
 
-### Déplacement d'un drone
+C'est la règle la plus importante du module :
 
-1. Batterie > 0
-2. Drone non bloqué (`bloque == 0`)
-3. Cible dans la grille
-4. Distance Chebyshev ≤ 1
-5. Survivant libre sur la case cible → chargé automatiquement
-6. Case cible = hôpital + drone porte survivant → livraison +1pt + recharge batterie
-7. Batterie −= 1 **sauf** si tempête sur la case du drone
-8. Maximum 3 déplacements par drone par tour
-
-### Propagation des tempêtes
-
-- Chaque tour, chaque tempête peut se déplacer d'une case (pas en diagonale)
-- Probabilité de déplacement : `PROBA_PROPAGATION = 0.3`
-- Une tempête ne peut pas se déplacer sur l'hôpital
-- Une zone dangereuse (X) se propage tous les 2 tours, orthogonalement, pas sur bâtiment/hôpital/survivant
-
-### Blocage par tempête
-
-- Tempête arrive sur un drone → drone bloqué 2 tours
-- Un drone bloqué ne consomme pas de batterie
-- Un drone bloqué portant un survivant le conserve
-
-## Lien avec le projet
-
-**Convention : `colonne: str`, `ligne: int` (1-based)**
+```
+valider_mouvement()   →  vérifie les règles SANS modifier l'état
+executer_mouvement()  →  applique le mouvement SI validé
+```
 
 ```python
-def peut_se_deplacer(drone, col_cible: str, lig_cible: int, etat) -> tuple:
-    """
-    Vérifie si un drone peut se déplacer vers la cible.
-    Retourne (bool, str) : (autorisé, message d'erreur ou '')
-    """
-    if drone.est_hs:
-        return False, 'Drone HS (batterie vide)'
-    if drone.est_bloque:
-        return False, f'Drone bloqué ({drone.bloque} tours restants)'
-    if not coord_valide(col_cible, lig_cible):
-        return False, 'Case hors grille'
-    dist = distance_chebyshev(drone.colonne, drone.ligne, col_cible, lig_cible)
-    if dist != 1:
-        return False, f"Distance invalide ({dist}) — une case à la fois"
-    return True, ''
-
-
-def executer_deplacement(drone, col_cible: str, lig_cible: int, etat) -> list:
-    """
-    Exécute un déplacement validé. Retourne la liste des événements survenus.
-    """
-    evenements = []
-    drone.colonne = col_cible
-    drone.ligne   = lig_cible
-
-    # Tempête sur la case d'arrivée ?
-    tempete = next((t for t in etat.tempetes if t.colonne == col_cible and t.ligne == lig_cible), None)
-    if tempete:
-        drone.bloque = 2
-        evenements.append(('BLOQUE', drone.identifiant, tempete.identifiant))
-    else:
-        drone.consommer_batterie()   # -1 batterie
-
-    # Chargement d'un survivant ?
-    surv = next((s for s in etat.survivants
-                 if s.etat == 'en_attente' and s.colonne == col_cible and s.ligne == lig_cible), None)
-    if surv and drone.survivant is None:
-        drone.survivant = surv
-        surv.etat = 'porte'
-        evenements.append(('CHARGE', drone.identifiant, surv.identifiant))
-
-    # Livraison à l'hôpital ?
-    if (col_cible == etat.hopital.colonne and lig_cible == etat.hopital.ligne
-            and drone.survivant):
-        s = drone.survivant
-        s.etat = 'sauve'
-        drone.survivant = None
-        etat.score += 1
-        drone.batterie = drone.batterie_max   # recharge
-        evenements.append(('LIVRAISON', drone.identifiant, s.identifiant))
-
-    return evenements
-
-
-def propager_tempetes(etat, proba: float = 0.3) -> None:
-    """Déplace chaque tempête aléatoirement avec probabilité proba."""
-    import random
-    COLS = [chr(ord('A') + i) for i in range(12)]
-    for t in etat.tempetes:
-        if random.random() < proba:
-            # Voisins orthogonaux valides (pas l'hôpital)
-            voisins = []
-            for dcol, dlig in [(-1,0),(1,0),(0,-1),(0,1)]:
-                i = ord(t.colonne) - ord('A') + dcol
-                l = t.ligne + dlig
-                if 0 <= i < 12 and 1 <= l <= 12:
-                    c = COLS[i]
-                    if not (c == etat.hopital.colonne and l == etat.hopital.ligne):
-                        voisins.append((c, l))
-            if voisins:
-                t.colonne, t.ligne = random.choice(voisins)
+# Dans console.py
+ok, raison = valider_mouvement(etat, drone, cible)
+if ok:
+    ligne_log = executer_mouvement(etat, drone, cible, drones_recharges)
+else:
+    print(f"Mouvement refusé : {raison}")
 ```
+
+Avantage : on peut tester la validation sans modifier quoi que ce soit dans le jeu.
+C'est aussi plus lisible : chaque fonction fait une seule chose.
+
+---
+
+## 2. Valider un mouvement drone
+
+La validation vérifie plusieurs règles dans l'ordre. Dès qu'une échoue,
+on retourne `(False, raison)` immédiatement.
+
+```python
+def valider_mouvement(etat, drone, cible):
+    """
+    drone  : dictionnaire du drone
+    cible  : tuple (col, lig)
+    Retourne (True, "") ou (False, message d'erreur).
+    """
+    did = drone["id"]
+
+    if drone["hors_service"]:
+        return False, f"{did} est hors service"
+
+    if drone["bloque"] > 0:
+        return False, f"{did} est bloqué ({drone['bloque']} tour(s))"
+
+    col, lig = cible
+    if not (0 <= col < 8 and 0 <= lig < 8):
+        return False, "Position hors de la grille"
+
+    dist = max(abs(col - drone["col"]), abs(lig - drone["lig"]))
+    if dist > 1:
+        return False, "Max 1 case par déplacement"
+
+    if cible in etat["batiments"]:
+        return False, "Case bloquée par un bâtiment"
+
+    if drone["batterie"] <= 0:
+        return False, f"{did} n'a plus de batterie"
+
+    return True, ""
+```
+
+---
+
+## 3. Règles de batterie (officielles)
+
+Trois règles distinctes s'appliquent sur la batterie :
+
+| Situation | Coût batterie |
+|-----------|---------------|
+| Déplacement seul | −1 |
+| Déplacement avec survivant embarqué | −2 |
+| Entrée dans une zone X (s'ajoute au coût précédent) | −2 supplémentaires |
+| Recharge à l'hôpital | +3 (par tour sur place) |
+
+```python
+# Calcul du coût dans executer_mouvement()
+cout = 2 if drone["survivant"] else 1        # transport ou déplacement simple
+if cible in etat["zones_x"]:
+    cout += 2                                  # supplément zone X
+drone["batterie"] = max(0, drone["batterie"] - cout)
+```
+
+> ⚠️ `max(0, ...)` empêche la batterie de passer en négatif.
+
+---
+
+## 4. Exécution d'un mouvement
+
+Après validation, `executer_mouvement()` modifie l'état et retourne une ligne de log.
+
+```python
+def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
+    did = drone["id"]
+    depart = (drone["col"], drone["lig"])
+    bat_avant = drone["batterie"]
+
+    # 1. Collision avec une tempête ?
+    tempete_sur_cible = _tempete_sur_case(etat, cible)
+    if tempete_sur_cible:
+        drone["bloque"] = 2
+        drone["col"], drone["lig"] = cible
+        return ...  # log "BLOQUE"
+
+    # 2. Coût batterie
+    cout = 2 if drone["survivant"] else 1
+    if cible in etat["zones_x"]:
+        cout += 2
+    drone["batterie"] = max(0, drone["batterie"] - cout)
+    drone["col"], drone["lig"] = cible
+
+    # 3. Hôpital : livraison + recharge
+    if cible == etat["hopital"]:
+        if drone["survivant"]:
+            etat["survivants"][drone["survivant"]]["etat"] = "sauve"
+            etat["score"] += 1
+            drone["survivant"] = None
+        if did not in drones_recharges_ce_tour:
+            drone["batterie"] = min(drone["batterie_max"],
+                                    drone["batterie"] + 3)   # +3 par tour
+            drones_recharges_ce_tour.add(did)
+    else:
+        # 4. Prise d'un survivant
+        s = _survivant_sur_case(etat, cible)
+        if s and drone["survivant"] is None:
+            drone["survivant"] = s["id"]
+            s["etat"] = "embarque"
+
+    # 5. Hors service si batterie à 0
+    if drone["batterie"] <= 0:
+        drone["hors_service"] = True
+
+    return ...  # ligne de log
+```
+
+---
+
+## 5. Propagation des zones X
+
+Tous les `PROPAGATION_FREQUENCE` tours, les zones X s'étendent vers leurs voisins
+orthogonaux avec une probabilité `PROBA_PROPAGATION` :
+
+```python
+def propager_zones_x(etat):
+    nouvelles = set()
+
+    for zone in list(etat["zones_x"]):      # list() pour itérer sur une copie
+        for voisin in _voisins_ortho(zone):  # 4 voisins N/S/E/O
+            if not _case_valide(voisin):
+                continue
+            if voisin in etat["zones_x"] or voisin in nouvelles:
+                continue
+            if random.random() < PROBA_PROPAGATION:   # ex: 30% de chance
+                nouvelles.add(voisin)
+
+    for pos in nouvelles:
+        etat["zones_x"].add(pos)
+```
+
+Pourquoi `list(etat["zones_x"])` avant d'itérer ?
+Parce qu'on ne peut pas modifier un set pendant qu'on l'itère.
+La copie garantit qu'on travaille sur l'état avant propagation.
+
+---
+
+## 6. Phase météo (déplacement automatique des tempêtes)
+
+Ch aque tempête a 50% de chance de se déplacer automatiquement en fin de tour :
+
+```python
+def deplacer_tempetes(etat):
+    for tempete in etat["tempetes"].values():
+        if random.random() > 0.5:          # 50% : ne bouge pas
+            continue
+
+        cible = (tempete["col"] + tempete["dx"],
+                 tempete["lig"] + tempete["dy"])
+
+        if not _case_libre_tempete(etat, cible, etat["hopital"]):
+            # Rebond : chercher une direction libre aléatoire
+            voisins = _voisins_diag((tempete["col"], tempete["lig"]))
+            libres = [v for v in voisins
+                      if _case_libre_tempete(etat, v, etat["hopital"])]
+            if libres:
+                cible = random.choice(libres)
+                tempete["dx"] = cible[0] - tempete["col"]
+                tempete["dy"] = cible[1] - tempete["lig"]
+            else:
+                continue   # reste sur place
+
+        tempete["col"], tempete["lig"] = cible
+```
+
+---
+
+## 7. Fin de partie
+
+```python
+def verifier_fin_partie(etat):
+    survivants = etat["survivants"]
+    drones = etat["drones"]
+
+    # Victoire : tous les survivants sont sauvés
+    if all(s["etat"] == "sauve" for s in survivants.values()):
+        etat["partie_finie"] = True
+        etat["victoire"] = True
+        return True
+
+    # Défaite : dépassement du nombre de tours
+    if etat["tour"] > NB_TOURS_MAX:
+        etat["partie_finie"] = True
+        return True
+
+    # Défaite : tous les drones hors service
+    if all(d["hors_service"] for d in drones.values()):
+        etat["partie_finie"] = True
+        return True
+
+    return False
+```
+
+La fonction `all()` est très lisible : elle retourne `True` si la condition est vraie
+pour **chaque** élément de l'itérable.
+
+---
+
+## 8. Exercice A — Valider un mouvement simple
+
+```python
+etat = {
+    "batiments": [(2, 3)],
+    "zones_x": set(),
+    "hopital": (0, 7),
+    "drones": {},
+    "tempetes": {},
+    "survivants": {},
+}
+drone = {
+    "id": "D1", "col": 1, "lig": 1,
+    "batterie": 5, "batterie_max": 20,
+    "survivant": None, "bloque": 0, "hors_service": False
+}
+
+# Test 1 : mouvement valide
+print(valider_mouvement(etat, drone, (2, 1)))   # (True, "")
+
+# Test 2 : distance trop grande
+print(valider_mouvement(etat, drone, (4, 1)))   # (False, "Max 1 case...")
+
+# Test 3 : bâtiment sur la cible
+print(valider_mouvement(etat, drone, (2, 3)))   # (False, "Case bloquée...")
+```
+
+---
+
+## 9. Exercice B — Compter les survivants restants
+
+```python
+# Avec all() et values()
+def tous_sauves(etat):
+    return all(s["etat"] == "sauve" for s in etat["survivants"].values())
+
+# Avec un compteur
+def nb_survivants_restants(etat):
+    nb = 0
+    for s in etat["survivants"].values():
+        if s["etat"] != "sauve":
+            nb += 1
+    return nb
+```
+
+---
 
 ## Erreurs classiques
 
 **Erreur 1 — Exécuter sans valider**
 ```python
-# ❌ Aucune vérification → déplacement invalide silencieux
-drone.colonne = col_cible
-drone.ligne   = lig_cible
+# ❌ Déplacement direct sans vérification
+drone["col"], drone["lig"] = cible
 
-# ✅ Toujours valider avant d'exécuter
-ok, msg = peut_se_deplacer(drone, col_cible, lig_cible, etat)
+# ✅ Toujours valider d'abord
+ok, raison = valider_mouvement(etat, drone, cible)
 if ok:
-    evenements = executer_deplacement(drone, col_cible, lig_cible, etat)
+    executer_mouvement(etat, drone, cible, drones_recharges)
 else:
-    print(f'Mouvement refusé : {msg}')
+    print(f"Refusé : {raison}")
 ```
 
-**Erreur 2 — Afficher dans les fonctions de logique**
+**Erreur 2 — Itérer sur un set en le modifiant**
 ```python
-# ❌ La logique ne doit pas afficher — mélange MVC
-def executer_deplacement(drone, ...):
-    print(f'{drone.identifiant} se déplace')   # ❌
-    ...
-
-# ✅ Retourner des événements, afficher dans la vue
-def executer_deplacement(drone, ...) -> list:
-    evenements = []
-    ...
-    return evenements   # l'affichage est fait par console.py
-```
-
-**Erreur 3 — Modifier l'état pendant l'itération**
-```python
-# ❌ Modifier etat.survivants pendant une itération sur etat.survivants
-for s in etat.survivants:
-    if s.etat == 'sauve':
-        etat.survivants.remove(s)   # comportement imprévisible
+# ❌ RuntimeError : modification pendant itération
+for zone in etat["zones_x"]:
+    etat["zones_x"].add(voisin)
 
 # ✅ Itérer sur une copie
-for s in etat.survivants[:]:
-    if s.etat == 'sauve':
-        etat.survivants.remove(s)
+for zone in list(etat["zones_x"]):
+    etat["zones_x"].add(voisin)
 ```
 
-## Exercice de compréhension
+**Erreur 3 — Batterie négative**
+```python
+# ❌ La batterie peut passer en dessous de 0
+drone["batterie"] -= cout
 
-**Q1.** Pourquoi `peut_se_deplacer()` et `executer_deplacement()` sont deux fonctions séparées ?
-<details><summary>Réponse</summary>
+# ✅ Bloquer à 0
+drone["batterie"] = max(0, drone["batterie"] - cout)
+```
 
-Principe de responsabilité unique : la validation vérifie les règles sans changer l'état, l'exécution modifie l'état. On peut ainsi tester la validation indépendamment, et prévisualiser un mouvement sans l'exécuter.
-</details>
+---
 
-**Q2.** Que retourne `executer_deplacement()` et pourquoi une liste ?
-<details><summary>Réponse</summary>
+## Résumé des règles du jeu
 
-Une liste de tuples d'événements : `('BLOQUE', 'D1', 'T2')`, `('LIVRAISON', 'D3', 'S1')`… Une liste car plusieurs événements peuvent se produire en un déplacement (ex : charger un survivant ET se bloquer).
-</details>
+| Règle | Valeur |
+|-------|--------|
+| Déplacements J1 par tour | 3 max (1 par drone) |
+| Déplacements J2 par tour | 2 max (1 par tempête) |
+| Coût déplacement seul | −1 batterie |
+| Coût avec survivant | −2 batterie |
+| Supplément zone X | −2 batterie |
+| Recharge hôpital | +3 par tour |
+| Blocage tempête | 2 tours |
+| Propagation zones X | tous les 3 tours, 30% |
+| Phase météo | 50% de chance/tempête |
 
-**Q3.** Avec `PROBA_PROPAGATION = 0.3` et `random.seed(42)`, la tempête se déplace-t-elle à coup sûr ?
-<details><summary>Réponse</summary>
-
-Non. `random.random() < 0.3` signifie 30% de chances par tour. Avec `seed=42`, la séquence est déterministe mais pas forcément vraie au premier appel.
-</details>
+---
 
 ## Exercices du module
 
 Voir `exercices/ex_07_logique.py`
 
-## Tips et best practices
+## Prompts IA utiles
 
-- **Sépare validation et exécution** : `peut_se_deplacer()` + `executer_deplacement()`.
-- **Retourne des événements** plutôt que d'afficher dans les fonctions de logique.
-- **Teste chaque règle indépendamment** avec de petits scripts.
-- **Jamais de `print()` dans la logique** — les affichages appartiennent à `affichage.py`.
+> *« Comment séparer la validation et l'exécution d'une action dans un jeu Python ? »*
 
-## Références
+> *« Comment implémenter un système de points avec des dictionnaires Python ? »*
 
-- [Real Python — MVC Pattern in Python](https://realpython.com/python-mvc/)
-- [Docs Python — random.random()](https://docs.python.org/fr/3/library/random.html#random.random)
-
-## Prompts IA
-
-> *« Comment structurer un moteur de jeu en Python pour séparer la logique, l'affichage et la saisie ? »*
-
-> *« Explique-moi comment implémenter une propagation aléatoire dans un jeu Python (probabilité par case). »*
-
-> *« Comment retourner plusieurs informations depuis une fonction Python — tuple, dataclass, ou dict ? »*
+> *« Comment itérer sur un dictionnaire de dictionnaires pour trouver tous les éléments qui vérifient une condition ? »*
