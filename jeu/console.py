@@ -11,11 +11,14 @@
 #     - Chaque tempête déplacée au plus 1 fois par tour
 #     - 1 seule case par déplacement
 #   Recharge hôpital : 1 seule fois par tour par drone
+#   Hôpital : aucun bâtiment adjacent
+#   Propagation : les ZONES X s'étendent (pas les tempêtes)
+#   Déplacement auto des tempêtes : en fin de tour (après P2)
 #
 # PRINCIPE AFFICHAGE :
 #   - Aucun print() entre render_complet() et input()
 #   - Les erreurs sont passées en paramètre à render_complet() via msg_erreur=
-#     → elles s'affichent inline sur la ligne de prompt, en rouge
+#     -> elles s'affichent inline sur la ligne de prompt, en rouge
 #   - Le log n'est jamais pollué par des erreurs
 # =============================================================================
 
@@ -23,7 +26,7 @@ from modeles import EtatJeu, Drone, Tempete, Position
 from logique import (
     valider_mouvement, valider_mouvement_tempete,
     executer_mouvement, executer_mouvement_tempete,
-    deplacer_tempetes, propager_tempetes,
+    deplacer_tempetes, propager_zones_x,
     appliquer_blocages, verifier_fin_partie
 )
 from affichage import render_complet
@@ -70,14 +73,8 @@ def parser_commande(texte: str) -> tuple:
 # ---------------------------------------------------------------------------
 
 def _prompt(texte_prompt: str, msg_erreur: str = None) -> str:
-    """
-    Affiche le prompt et retourne la saisie.
-    Si msg_erreur est fourni, il s'affiche en rouge AVANT le prompt,
-    sur la même zone — sans aucun render() préalable.
-    Le prompt s'affiche avec end="" pour que l'input suive sur la même ligne.
-    """
     if msg_erreur:
-        print(f"  \033[91m✗ {msg_erreur}\033[0m")
+        print(f"  \033[91m\u2717 {msg_erreur}\033[0m")
     print(f"  {texte_prompt}", end="", flush=True)
     try:
         return input().strip()
@@ -92,14 +89,6 @@ def _prompt(texte_prompt: str, msg_erreur: str = None) -> str:
 def phase_drones(etat: EtatJeu, log_tour: list) -> bool:
     """
     Phase de commande des drones.
-
-    Règles :
-      - MAX_DEPL_DRONE déplacements totaux dans le tour
-      - Chaque drone au plus 1 déplacement par tour
-      - Séquence : sélection drone → saisie cible (validation immédiate)
-        Si cible invalide : re-render + erreur sur le prompt, redemander
-        Si cible valide   : déplacement exécuté directement (pas de ok)
-
     Retourne False si le joueur veut quitter.
     """
     drones_bouge = {d.identifiant: False for d in etat.drones}
@@ -109,11 +98,9 @@ def phase_drones(etat: EtatJeu, log_tour: list) -> bool:
     msg_erreur: str = None
 
     while deplacements_restants > 0:
-        # Re-render complet (efface + redessine) — erreur éventuelle affichée après
         render_complet(etat, log_tour, phase='DRONES', depl_restants=deplacements_restants,
                        entite_selectionnee=drone_actuel)
 
-        # Prompt adapté selon si un drone est déjà sélectionné
         if drone_actuel is None:
             texte_prompt = (f"P1-DRONES | {deplacements_restants}/{MAX_DEPL_DRONE} dépl."
                             "  — drone (D1..D6) ou 'next' : ")
@@ -126,7 +113,7 @@ def phase_drones(etat: EtatJeu, log_tour: list) -> bool:
                             "  — cible (ex: E6) / autre drone / 'next' : ")
 
         saisie = _prompt(texte_prompt, msg_erreur)
-        msg_erreur = None  # reset après affichage
+        msg_erreur = None
 
         type_cmd, valeur = parser_commande(saisie)
 
@@ -134,7 +121,6 @@ def phase_drones(etat: EtatJeu, log_tour: list) -> bool:
             return False
 
         if type_cmd == 'aide':
-            # Aide : render + affiche l'aide en dessous du séparateur
             render_complet(etat, log_tour, phase='DRONES', depl_restants=deplacements_restants)
             _afficher_aide()
             input("  [Entrée pour continuer]")
@@ -158,7 +144,6 @@ def phase_drones(etat: EtatJeu, log_tour: list) -> bool:
                 msg_erreur = f"{valeur} a déjà bougé ce tour (1 dépl./drone/tour)"
                 continue
             drone_actuel = d
-            # Pas de msg_erreur → le re-render au prochain tour montrera le drone sélectionné
             continue
 
         if type_cmd == 'position':
@@ -171,17 +156,14 @@ def phase_drones(etat: EtatJeu, log_tour: list) -> bool:
                 continue
             ok, raison = valider_mouvement(etat, drone_actuel, pos)
             if not ok:
-                # Mouvement invalide → msg_erreur sur le prochain render, on garde drone_actuel
                 msg_erreur = raison
                 continue
-            # Mouvement valide → exécuter directement
             ligne_log = executer_mouvement(etat, drone_actuel, pos, drones_recharges)
             log_action(etat, ligne_log)
             log_tour.append(ligne_log)
             drones_bouge[drone_actuel.identifiant] = True
             deplacements_restants -= 1
             drone_actuel = None
-            # Le re-render au début du prochain tour affichera l'état mis à jour
             continue
 
         msg_erreur = f"Commande inconnue : '{saisie}'  (aide : ?)"
@@ -196,14 +178,6 @@ def phase_drones(etat: EtatJeu, log_tour: list) -> bool:
 def phase_tempetes(etat: EtatJeu, log_tour: list) -> bool:
     """
     Phase de déplacement manuel des tempêtes.
-
-    Règles :
-      - MAX_DEPL_TEMPETE déplacements totaux dans le tour
-      - Chaque tempête au plus 1 déplacement par tour
-      - Séquence : sélection tempête → saisie cible
-        Si cible invalide : re-render + erreur inline, redemander
-        Si cible valide   : déplacement exécuté directement
-
     Retourne False si le joueur veut quitter.
     """
     tempetes_bougees = {t.identifiant: False for t in etat.tempetes}
@@ -281,10 +255,10 @@ def phase_tempetes(etat: EtatJeu, log_tour: list) -> bool:
 def boucle_saisie(etat: EtatJeu) -> bool:
     """
     Gère un tour complet :
-    1. Phase Drones (P1) — joueur pilote ses drones
-    2. Phase Tempêtes manuelle (P2) — joueur déplace les tempêtes
-    3. Déplacement automatique résiduel des tempêtes
-    4. Propagation éventuelle
+    1. Phase Drones (P1)         — joueur pilote ses drones
+    2. Phase Tempêtes (P2)       — joueur déplace les tempêtes manuellement
+    3. Déplacement auto des tempêtes (IA)
+    4. Propagation des zones X (périodique)
     5. Vérification fin de partie
 
     Retourne True si la partie continue, False pour quitter.
@@ -299,8 +273,13 @@ def boucle_saisie(etat: EtatJeu) -> bool:
     if not phase_tempetes(etat, log_tour):
         return False
 
-    # --- Automatique : propagation ---
-    for ligne in propager_tempetes(etat):
+    # --- Automatique : déplacement des tempêtes (après P2) ---
+    for ligne in deplacer_tempetes(etat):
+        log_action(etat, ligne)
+        log_tour.append(ligne)
+
+    # --- Automatique : propagation des zones X ---
+    for ligne in propager_zones_x(etat):
         log_action(etat, ligne)
         log_tour.append(ligne)
 
@@ -315,7 +294,7 @@ def boucle_saisie(etat: EtatJeu) -> bool:
         else:
             raison = ("Nombre de tours maximum atteint." if etat.tour > 20
                       else "Plus aucun drone actif.")
-            print(f"\n  ✕ DÉFAITE. {raison}")
+            print(f"\n  \u2715 DÉFAITE. {raison}")
         return False
 
     return True
@@ -340,7 +319,9 @@ def _afficher_aide():
   ──────
   P1 : 3 déplacements de drones / tour — 1 seul dépl./drone/tour — 1 case/dépl.
   P2 : 2 déplacements de tempêtes / tour — 1 seul dépl./tempête/tour — 1 case/dépl.
-  Recharge hôpital : 1 fois / tour / drone (même si le drone reste dessus)
+  Recharge hôpital : 1 fois / tour / drone
+  Fin de tour : les tempêtes se déplacent automatiquement
+  Zones X : s'étendent périodiquement (les tempêtes ne propagent PAS)
 
   SYMBOLES
   ────────
