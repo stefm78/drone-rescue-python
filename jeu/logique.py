@@ -210,6 +210,42 @@ def valider_mouvement_tempete(etat, tempete, cible):
 
 
 # ---------------------------------------------------------------------------
+# Recharge automatique en début de tour
+# ---------------------------------------------------------------------------
+
+def appliquer_recharges_hopital(etat, drones_recharges_ce_tour):
+    """
+    Recharge tous les drones dont la position courante est l'hôpital,
+    en début de phase J1 (avant tout déplacement).
+    Permet à un drone qui stationne sur l'hôpital de se recharger
+    chaque tour, pas seulement lors du tour où il y arrive.
+    Retourne la liste des lignes de log.
+    """
+    logs = []
+    hopital = etat["hopital"]
+    for drone in etat["drones"].values():
+        did = drone["id"]
+        if drone["hors_service"]:
+            continue
+        if (drone["col"], drone["lig"]) != hopital:
+            continue
+        if did in drones_recharges_ce_tour:
+            continue
+        bat_avant = drone["batterie"]
+        drone["batterie"] = min(
+            drone["batterie_max"],
+            drone["batterie"] + RECHARGE_HOPITAL
+        )
+        drones_recharges_ce_tour.add(did)
+        pos_str = _pos_str(hopital)
+        logs.append(
+            f"T{etat['tour']:02d}  {did:3s}  {pos_str}→{pos_str}  "
+            f"bat:{bat_avant}→{drone['batterie']}  RECHARGE +{RECHARGE_HOPITAL} (stationnaire)"
+        )
+    return logs
+
+
+# ---------------------------------------------------------------------------
 # Exécution des mouvements
 # ---------------------------------------------------------------------------
 
@@ -256,7 +292,7 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
             evenement = f"LIVRAISON {s['id']} +1pt"
             drone["survivant"] = None
             surv_id = None
-        # Recharge
+        # Recharge (seulement si pas déjà rechargé ce tour)
         if did not in drones_recharges_ce_tour:
             drone["batterie"] = min(
                 drone["batterie_max"],
