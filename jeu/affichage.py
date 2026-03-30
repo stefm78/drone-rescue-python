@@ -1,38 +1,42 @@
 # =============================================================================
 # affichage.py — Rendu de l'interface console de Drone Rescue
 #
-# LAYOUT :
-#   ┌──────────────────────────────────────────────┐
-#   │  SCORE · Surv. rest. · Zones X · Tour N/M    │  ← ligne score (haut)
-#   ├──────────────────────────────────────────────┤
-#   │                            │ DRONES           │
-#   │   GRILLE 12x12             │ D1 A1  10/20 …  │  ← plateau + statuts droite
-#   │                            │ TEMPÊTES         │
-#   │                            │ T1 J2            │
-#   ├──────────────────────────────────────────────┤
-#   │  LOG  T04 D3 B7→E6  bat:6→5  …               │  ← log condensé (bas)
-#   └──────────────────────────────────────────────┘
-#   (zone saisie sous le log)
+# LAYOUT (3 zones) :
+#
+#   ┌─────────────────────────────────────────────────────────────────────────┐
+#   │  DRONE RESCUE  ·  Score 3  ·  Surv. 7  ·  Tour 4/20  ·  [P1-DRONES]  │  ← ligne titre + score
+#   ├────────────────────────┬──────────────────┬──────────────────────────┤
+#   │                        │  D1  A1  10/20   │  T04  D3  B7→E6  bat:5   │
+#   │   GRILLE  12×12        │  D2  B3   8/20   │  T04  D1  A1→B2  bat:9   │  ← 3 colonnes
+#   │                        │  T1  J2          │  ...                      │
+#   ├────────────────────────┴──────────────────┴──────────────────────────┤
+#   │  P1-DRONES | dépl. 2/3 — sélectionner un drone ou 'next' :  _        │  ← saisie
+#   └─────────────────────────────────────────────────────────────────────┘
+#
 # =============================================================================
 
 import os
+import re
 import shutil
 from modeles import EtatJeu, Drone
 from config import NB_TOURS_MAX
 
+# ---------------------------------------------------------------------------
 # Codes ANSI
+# ---------------------------------------------------------------------------
 _C = {
-    'D':  '\033[94m',  # Bleu   — drone
-    'T':  '\033[91m',  # Rouge  — tempête
-    'S':  '\033[92m',  # Vert   — survivant
-    'H':  '\033[93m',  # Jaune  — hôpital
-    'B':  '\033[90m',  # Gris   — bâtiment
-    'X':  '\033[35m',  # Magenta — zone X
+    'D':  '\033[94m',   # Bleu       — drone
+    'T':  '\033[91m',   # Rouge      — tempête
+    'S':  '\033[92m',   # Vert       — survivant
+    'H':  '\033[93m',   # Jaune      — hôpital
+    'B':  '\033[90m',   # Gris       — bâtiment
+    'X':  '\033[35m',   # Magenta    — zone X
     'ERR':'\033[91m',
     'OK': '\033[92m',
     'RST':'\033[0m',
     'BLD':'\033[1m',
     'DIM':'\033[2m',
+    'CYN':'\033[96m',   # Cyan clair — titre jeu
 }
 
 
@@ -50,42 +54,55 @@ def _dim(txt: str) -> str:
     return f"{_C['DIM']}{txt}{_C['RST']}"
 
 
+def _strip_ansi(s: str) -> str:
+    """Retire les codes ANSI pour calculer la largeur visible."""
+    return re.sub(r'\033\[[0-9;]*m', '', s)
+
+
+def _pad(s: str, width: int) -> str:
+    """Pad une chaîne (avec codes ANSI) à une largeur visible donnée."""
+    visible = len(_strip_ansi(s))
+    return s + ' ' * max(0, width - visible)
+
+
 # ---------------------------------------------------------------------------
-# Score (haut de l'écran)
+# Ligne titre + score (zone 1)
 # ---------------------------------------------------------------------------
 
-def render_score(etat: EtatJeu, phase: str = '', depl_restants: int = -1) -> str:
+def render_titre_score(etat: EtatJeu, phase: str = '', depl_restants: int = -1) -> str:
     """
-    Ligne de score affichée tout en haut.
-    Exemples :
-      ● Score 3  ·  Surv. 7  ·  Zones X 2  ·  Tour 4/20  ·  [P1-DRONES | dépl. 2/3]
+    Ligne unique combinant titre du jeu et score.
+    Exemple :
+      ✦ DRONE RESCUE  ·  Score 3  ·  Surv. 7  ·  Zones X 2  ·  Tour 4/20  ·  [P1-DRONES 2/3]
     """
+    from config import MAX_DEPL_DRONE, MAX_DEPL_TEMPETE
+    titre = f"{_C['CYN']}{_C['BLD']}✦ DRONE RESCUE{_C['RST']}"
     nb_surv = etat.survivants_restants()
     nb_zones = len(etat.zones_x)
-    base = (
+    ligne = (
+        f"{titre}  ·  "
         f"{_bold('Score')} {_col('H', str(etat.score))}  ·  "
-        f"Surv. rest. {_col('S', str(nb_surv))}  ·  "
+        f"Surv. {_col('S', str(nb_surv))}  ·  "
         f"Zones X {_col('X', str(nb_zones))}  ·  "
         f"Tour {etat.tour}/{NB_TOURS_MAX}"
     )
     if phase:
-        from config import MAX_DEPL_DRONE, MAX_DEPL_TEMPETE
         max_d = MAX_DEPL_DRONE if 'DRONE' in phase else MAX_DEPL_TEMPETE
         if depl_restants >= 0:
-            base += f"  ·  {_bold(phase)} {depl_restants}/{max_d}"
+            ligne += f"  ·  {_bold(phase)} {depl_restants}/{max_d}"
         else:
-            base += f"  ·  {_bold(phase)}"
-    return base
+            ligne += f"  ·  {_bold(phase)}"
+    return ligne
 
 
 # ---------------------------------------------------------------------------
-# Grille
+# Colonne 1 : Grille
 # ---------------------------------------------------------------------------
 
 def render_grille(etat: EtatJeu) -> list:
     """
-    Retourne la grille sous forme de liste de lignes (str),
-    sans retour à la ligne final, pour assemblage côte-à-côte.
+    Retourne la grille sous forme de liste de lignes brutes (str ANSI),
+    sans newline, pour assemblage côte-à-côte.
     """
     taille = etat.grille.taille
     lettres = list("ABCDEFGHIJKL")
@@ -107,20 +124,24 @@ def render_grille(etat: EtatJeu) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Statuts Drones (colonne droite)
+# Colonne 2 : Statuts Drones + Tempêtes (sans titres DRONES/TEMPÊTES)
 # ---------------------------------------------------------------------------
 
-def render_statuts_droite(etat: EtatJeu) -> list:
+def render_statuts(etat: EtatJeu) -> list:
     """
-    Retourne les lignes du panneau droit (Drones + Tempêtes),
-    pour assemblage côte-à-côte avec la grille.
+    Retourne les lignes de statut des drones puis des tempêtes,
+    SANS les en-têtes 'DRONES' et 'TEMPÊTES' pour gagner 2 lignes.
+    Format compact :
+      ID   Pos   Bat       Surv  Blq
+      D1   A1    10/20     —
+      ...séparateur vide...
+      T1   J2
     """
     lignes = []
 
     # ── Drones ──
-    lignes.append(_bold("DRONES"))
     lignes.append(_dim(f"{'ID':<4} {'Pos':<5} {'Bat':<9} {'Surv':<5} Blq"))
-    lignes.append("─" * 30)
+    lignes.append(_dim("─" * 30))
     for drone in etat.drones:
         statut = ""
         if drone.hors_service:
@@ -139,12 +160,12 @@ def render_statuts_droite(etat: EtatJeu) -> list:
             ligne = _col('D', drone.identifiant) + ligne[2:]
         lignes.append(ligne)
 
+    # Ligne vide séparatrice
     lignes.append("")
 
     # ── Tempêtes ──
-    lignes.append(_bold("TEMPÊTES"))
     lignes.append(_dim(f"{'ID':<4} {'Pos'}"))
-    lignes.append("─" * 14)
+    lignes.append(_dim("─" * 14))
     for t in etat.tempetes:
         lignes.append(_col('T', f"{t.identifiant:<4} {t.position}"))
 
@@ -152,99 +173,85 @@ def render_statuts_droite(etat: EtatJeu) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Log condensé (bas de l'écran)
+# Colonne 3 : Log condensé (mouvements validés seulement)
 # ---------------------------------------------------------------------------
 
-def render_log_bas(etat: EtatJeu, nb_lignes: int) -> list:
+def render_log_col(etat: EtatJeu, nb_lignes: int) -> list:
     """
-    Retourne les nb_lignes dernières lignes du log sous forme de liste.
-    nb_lignes est calculé dynamiquement en fonction de la hauteur terminal.
+    Retourne les nb_lignes dernières entrées du log (1 ligne/mouvement).
+    L'en-tête occupe la 1ère ligne, les entrées suivent.
     """
-    if nb_lignes <= 0:
-        return []
-    lignes_log = [_bold("LOG") + _dim(" (mouvements validés)")]
-    lignes_log.append("─" * 55)
+    # en-tête sur 1 ligne
+    lignes = [_dim("─── LOG ─────────────────────────────────")]
     if not etat.historique:
-        lignes_log.append(_dim("  (aucune action)"))
+        lignes.append(_dim("  (aucun mouvement)"))
     else:
-        extrait = etat.historique[-(nb_lignes):]  # dernières lignes
-        for ligne in extrait:
-            lignes_log.append(_dim("  ") + ligne)
-    return lignes_log
+        # garder seulement nb_lignes-1 entrées (on a déjà l'en-tête)
+        extrait = etat.historique[-(max(1, nb_lignes - 1)):]
+        for l in extrait:
+            lignes.append(_dim("  ") + l)
+    return lignes
 
 
 # ---------------------------------------------------------------------------
-# Affichage complet (efface et redessine l'écran)
+# Affichage complet
 # ---------------------------------------------------------------------------
 
 def render_complet(etat: EtatJeu, log_tour: list = None,
                    phase: str = '', depl_restants: int = -1,
                    entite_selectionnee=None):
     """
-    Efface le terminal et affiche :
+    Efface le terminal et affiche en 3 zones :
 
-      1. Score          (haut)
-      2. Grille + statuts côte-à-côte
-      3. Log condensé   (bas, taille adaptée au terminal)
+      1. Titre + score  (1 ligne)
+      2. 3 colonnes côte-à-côte sur toute la hauteur disponible :
+           Col1 : plateau
+           Col2 : statuts drones + tempêtes
+           Col3 : log condensé (mouvements validés)
+      3. Ligne de séparation  ← la saisie joueur vient juste après
 
-    Paramètres
-    ----------
-    log_tour          : liste de lignes du tour en cours (pour info temps réel)
-    phase             : 'DRONES' | 'TEMPETES' | ''
-    depl_restants     : déplacements restants à afficher dans le score
-    entite_selectionnee : non utilisé ici, réservé pour extensions
+    La saisie (input) est appelée dans console.py juste après ce render.
     """
-    # Dimensions terminal
     try:
-        term_cols, term_rows = shutil.get_terminal_size((120, 30))
+        term_cols, term_rows = shutil.get_terminal_size((120, 35))
     except Exception:
-        term_cols, term_rows = 120, 30
+        term_cols, term_rows = 120, 35
 
     # Effacer l'écran
     print("\033[2J\033[H", end="")
 
-    # ── 1. Score ──
-    score_line = render_score(etat, phase, depl_restants)
-    print(score_line)
-    print("═" * min(term_cols, 80))
+    # ── Zone 1 : Titre + Score ──
+    print(render_titre_score(etat, phase, depl_restants))
+    print("═" * min(term_cols, 100))
 
-    # ── 2. Grille + Statuts côte-à-côte ──
-    grille_lines  = render_grille(etat)
-    droite_lines  = render_statuts_droite(etat)
+    # ── Zone 2 : 3 colonnes ──
+    col1 = render_grille(etat)           # plateau
+    col2 = render_statuts(etat)          # statuts
 
-    # Largeur grille brute (sans codes ANSI) : 5 + taille*4 chars
+    # Hauteur disponible : term_rows - 1 titre - 1 sépar haut - 1 sépar bas - 1 prompt
+    hauteur_dispo = max(5, term_rows - 4)
+
+    col3 = render_log_col(etat, hauteur_dispo)  # log adapté à la hauteur
+
+    # Largeurs de colonnes visibles
     taille = etat.grille.taille
-    grille_width = 5 + taille * 4 + 2  # +2 pour la marge
-    separateur = "  │  "
+    col1_w = 5 + taille * 4 + 2          # grille : "  A   B  ..." + "N | . . ." + marge
+    col2_w = 34                           # statuts : ~34 chars
+    # col3 prend le reste
 
-    nb_gr = len(grille_lines)
-    nb_dr = len(droite_lines)
-    max_lignes = max(nb_gr, nb_dr)
+    sep = "  │  "
 
-    for i in range(max_lignes):
-        g = grille_lines[i] if i < nb_gr else ""
-        d = droite_lines[i] if i < nb_dr else ""
-        # Padding grille pour aligner la colonne droite
-        g_visible = _strip_ansi(g)
-        pad = grille_width - len(g_visible)
-        print(g + " " * max(0, pad) + separateur + d)
+    nb_max = max(len(col1), len(col2), len(col3), hauteur_dispo)
+    # Limiter à la hauteur dispo
+    nb_max = min(nb_max, hauteur_dispo)
 
-    print()
+    for i in range(nb_max):
+        c1 = col1[i] if i < len(col1) else ""
+        c2 = col2[i] if i < len(col2) else ""
+        c3 = col3[i] if i < len(col3) else ""
+        print(_pad(c1, col1_w) + sep + _pad(c2, col2_w) + sep + c3)
 
-    # ── 3. Log condensé (bas) ──
-    # Lignes déjà utilisées : 1 score + 1 sépar + max_lignes grille + 1 vide
-    lignes_utilisees = 1 + 1 + max_lignes + 1
-    # Réserver 2 lignes pour le prompt de saisie
-    lignes_log_dispo = max(0, term_rows - lignes_utilisees - 4)
-    nb_log = min(8, max(2, lignes_log_dispo))  # entre 2 et 8 lignes
-
-    print("─" * min(term_cols, 80))
-    for ligne in render_log_bas(etat, nb_log - 1):  # -1 pour l'en-tête
-        print(ligne)
-    print()
-
-
-def _strip_ansi(s: str) -> str:
-    """Retire les codes ANSI pour calculer la largeur visible d'une chaîne."""
-    import re
-    return re.sub(r'\033\[[0-9;]*m', '', s)
+    # ── Zone 3 : séparateur avant la saisie ──
+    print("─" * min(term_cols, 100))
+    # La saisie (print prompt + input) est faite dans console.py,
+    # immédiatement après cet appel → elle apparaît toujours en bas.
