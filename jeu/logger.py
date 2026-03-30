@@ -1,74 +1,62 @@
 # =============================================================================
-# logger.py — Journal des actions de la partie
+# logger.py — Journalisation de la partie Drone Rescue
 #
-# Fonctions :
-#   log_action(etat, texte)     -> None
-#       Enregistre une ligne dans etat.historique ET dans le fichier .log
-#
-#   sauvegarder_log(etat)       -> None
-#       Écrit tout l'historique dans le fichier LOG_FICHIER
-#
-#   charger_log(chemin)         -> list[str]
-#       Lit un fichier .log et retourne les lignes
+# Le log est condensé : 1 ligne par mouvement validé uniquement.
+# Les mouvements invalides ne sont PAS loggés (affichés inline dans console.py).
 # =============================================================================
 
+import os
 from config import LOG_FICHIER
 
 
-def log_action(etat, texte: str):
+def log_action(etat, ligne: str):
     """
-    Ajoute 'texte' à etat.historique (liste en mémoire)
-    et l'écrit immédiatement dans le fichier de log (mode append).
+    Ajoute une ligne à l'historique de l'état (pour l'affichage en temps réel)
+    ET l'écrit dans le fichier log.
 
-    Paramètres
-    ----------
-    etat  : EtatJeu  — l'état courant de la partie
-    texte : str      — la ligne à enregistrer
+    N'est appelé que pour les mouvements validés et exécutés.
     """
-    etat.historique.append(texte)
-    try:
-        with open(LOG_FICHIER, 'a', encoding='utf-8') as f:
-            f.write(texte + '\n')
-    except OSError as e:
-        # En cas d'échec d'écriture disque, on continue sans planter le jeu
-        print(f"[logger] Impossible d'écrire dans {LOG_FICHIER} : {e}")
+    etat.historique.append(ligne)
+    _ecrire_fichier(ligne)
 
 
 def sauvegarder_log(etat):
     """
-    Écrit l'intégralité de etat.historique dans LOG_FICHIER.
-    Utile pour réécrire le log complet en fin de partie.
-
-    Paramètres
-    ----------
-    etat : EtatJeu
+    Écrit l'intégralité du log de partie dans le fichier final.
+    (Le fichier est aussi mis à jour en temps réel via log_action.)
     """
     try:
         with open(LOG_FICHIER, 'w', encoding='utf-8') as f:
-            f.write('\n'.join(etat.historique))
-            f.write('\n')
+            f.write(f"=== Drone Rescue — Partie T{etat.tour:02d} | Score {etat.score} ===\n")
+            f.write(f"=== {'VICTOIRE' if etat.victoire else 'DÉFAITE'} ===\n\n")
+            for ligne in etat.historique:
+                f.write(ligne + "\n")
     except OSError as e:
-        print(f"[logger] Impossible de sauvegarder {LOG_FICHIER} : {e}")
+        print(f"  [logger] Impossible d'écrire {LOG_FICHIER} : {e}")
 
 
-def charger_log(chemin: str = LOG_FICHIER) -> list:
-    """
-    Lit un fichier .log existant et retourne la liste des lignes.
-    Utile pour afficher l'historique d'une partie précédente.
+# Fichier log temps réel (mode append, créé à la première action)
+_fichier_ouvert = None
 
-    Paramètres
-    ----------
-    chemin : str  — chemin vers le fichier (défaut : LOG_FICHIER)
 
-    Retourne
-    --------
-    list[str] : liste des lignes, vide si fichier inexistant
-    """
+def _ecrire_fichier(ligne: str):
+    """Écriture temps réel dans le fichier log (append)."""
+    global _fichier_ouvert
     try:
-        with open(chemin, 'r', encoding='utf-8') as f:
-            return [ligne.rstrip('\n') for ligne in f.readlines()]
-    except FileNotFoundError:
-        return []
-    except OSError as e:
-        print(f"[logger] Erreur lecture {chemin} : {e}")
-        return []
+        if _fichier_ouvert is None:
+            _fichier_ouvert = open(LOG_FICHIER, 'w', encoding='utf-8')
+        _fichier_ouvert.write(ligne + "\n")
+        _fichier_ouvert.flush()
+    except OSError:
+        pass  # silencieux en cas d'erreur disque
+
+
+def fermer_log():
+    """Ferme le fichier log temps réel (à appeler en fin de partie)."""
+    global _fichier_ouvert
+    if _fichier_ouvert:
+        try:
+            _fichier_ouvert.close()
+        except OSError:
+            pass
+        _fichier_ouvert = None
