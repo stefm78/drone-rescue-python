@@ -1,20 +1,15 @@
 {
-  "GRILLE_TAILLE": 12,
-  "NB_DRONES": 6,
-  "NB_TEMPETES": 4,
-  "NB_BATIMENTS": 20,
-  "NB_SURVIVANTS": 10,
-  "NB_ZONES_DANGER": 2,
-  "BATTERIE_MAX": 20,
-  "BATTERIE_INIT": 10,
-  "MAX_DEPL_DRONE": 3,
-  "MAX_DEPL_TEMPETE": 2,
-  "NB_TOURS_MAX": 20,
-  "PROBA_PROPAGATION": 0.3,
-  "PROPAGATION_FREQUENCE": 2,
-  "HOPITAL_COL": 0,
-  "HOPITAL_LIG": 11,
-  "LOG_FICHIER": "partie.log",
-  "RESULTATS_FICHIER": "resultats.txt",
-  "LETTRES": "ABCDEFGHIJKL"
+  "grille": { "lignes": 8, "colonnes": 8 },
+  "drones": { "nb_max_j1": 3, "batterie_max": 20, "batterie_depart": 10 },
+  "tempetes": { "nb_max_j2": 2, "prob_meteo": 0.5 },
+  "regles": {
+    "cout_transport_survivant": 2,
+    "cout_entree_zone_x": 2,
+    "recharge_hopital_par_tour": 3
+  },
+  "lettres": ["A","B","C","D","E","F","G","H"],
+  "directions": {
+    "N": [-1,0], "S": [1,0], "E": [0,1], "O": [0,-1],
+    "NE": [-1,1], "NO": [-1,-1], "SE": [1,1], "SO": [1,-1]
+  }
 }
