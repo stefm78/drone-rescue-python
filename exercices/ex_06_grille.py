@@ -6,58 +6,57 @@
 #   - Créer et manipuler une grille 2D avec des listes imbriquées
 #   - Positionner des entités sur la grille
 #   - Afficher la grille en console avec coordonnées
-#   - Utiliser les codes ANSI pour colorer l'affichage
+#   - Calculer la distance de Chebyshev
 # =============================================================================
 
 
 # -----------------------------------------------------------------------------
 # EXERCICE 1 — Créer une grille vide
 # -----------------------------------------------------------------------------
-# La grille de Drone Rescue fait 12×12 cases.
-# Chaque case est initialisée avec le symbole '.' (vide).
+# La grille de Drone Rescue est une liste de listes.
+# grille[lig][col] = contenu de la case.
+# col et lig sont des entiers 0-basés (0 à taille-1).
 #
-# Écris une fonction creer_grille(taille=12) qui retourne
-# une liste de listes : grille[ligne][colonne]
-# Attention : ligne 0 = ligne 1 du jeu (index décalé de 1)
+# Écris creer_grille(taille=8) qui retourne
+# une liste de listes remplie de '.'.
 # -----------------------------------------------------------------------------
 
-def creer_grille(taille=12):
+def creer_grille(taille=8):
     """
     Retourne une grille taille×taille remplie de '.'.
-    grille[i][j] = case à la ligne i+1, colonne chr(65+j).
+    grille[lig][col] avec col, lig entiers 0-basés.
     """
-    # TODO : utiliser une compréhension de liste imbriquée
+    # TODO : utiliser une list comprehension imbriquée
     pass
 
 
 # Tests exercice 1
 if __name__ == "__main__":
     g = creer_grille()
-    print(len(g))        # 12
-    print(len(g[0]))     # 12
+    print(len(g))        # 8
+    print(len(g[0]))     # 8
     print(g[0][0])       # .
-    print(g[11][11])     # .
+    print(g[7][7])       # .
 
 
 # -----------------------------------------------------------------------------
 # EXERCICE 2 — Placer et lire une entité sur la grille
 # -----------------------------------------------------------------------------
 # Écris deux fonctions :
-#   placer(grille, colonne_lettre, ligne_num, symbole)
-#     → place le symbole sur la grille (ligne_num commence à 1)
-#   lire(grille, colonne_lettre, ligne_num)
-#     → retourne le contenu de la case
+#   placer(grille, col, lig, symbole)
+#     → place le symbole sur grille[lig][col]
+#   lire(grille, col, lig)
+#     → retourne le contenu de grille[lig][col]
 #
-# Colonnes : A=0, B=1, ..., L=11  (ord(col) - ord('A'))
-# Lignes   : 1=index 0, 2=index 1, ..., 12=index 11
+# col et lig sont des entiers 0-basés.
 # -----------------------------------------------------------------------------
 
-def placer(grille, colonne, ligne, symbole):
+def placer(grille, col, lig, symbole):
     # TODO
     pass
 
 
-def lire(grille, colonne, ligne):
+def lire(grille, col, lig):
     # TODO
     pass
 
@@ -65,84 +64,102 @@ def lire(grille, colonne, ligne):
 # Tests exercice 2
 if __name__ == "__main__":
     g = creer_grille()
-    placer(g, "A", 12, "H")   # Hôpital en A12
-    placer(g, "D", 3, "D1")   # Drone D1 en D3
-    placer(g, "G", 7, "S")    # Survivant en G7
-    print(lire(g, "A", 12))   # H
-    print(lire(g, "D", 3))    # D1
-    print(lire(g, "B", 1))    # .
+    placer(g, 0, 7, "H")   # Hôpital en col=0, lig=7
+    placer(g, 3, 2, "D")   # Drone en col=3, lig=2
+    placer(g, 6, 4, "S")   # Survivant en col=6, lig=4
+    print(lire(g, 0, 7))   # H
+    print(lire(g, 3, 2))   # D
+    print(lire(g, 1, 0))   # .
 
 
 # -----------------------------------------------------------------------------
 # EXERCICE 3 — Afficher la grille
 # -----------------------------------------------------------------------------
-# Écris une fonction afficher_grille(grille) qui affiche :
+# Écris afficher_grille(grille) qui affiche :
 #
-#      A   B   C   D  ...  L
-#   1  .   .   .   D1 ...  .
-#   2  .   .   .   .  ...  .
+#      0   1   2   3  ...  7
+#  0   .   .   .   D  ...  .
+#  1   .   .   .   .  ...  .
 #  ...
-#  12  H   .   .   .  ...  .
+#  7   H   .   .   .  ...  .
 #
-# Chaque case occupe exactement 4 caractères (ljust(4) ou format).
-# Les numéros de ligne sont alignés à droite sur 3 caractères.
-# BONUS : colorier en rouge les cases 'X', en jaune les drones,
-#         en vert les survivants, en bleu l'hôpital.
+# Chaque case occupe 4 caractères (ljust(4)).
+# Les numéros de ligne sont alignés à droite sur 3 caractères (rjust(3)).
+# Pas de codes de couleur ANSI.
 # -----------------------------------------------------------------------------
-
-COULEURS = {
-    "H": "\033[94m",   # Bleu
-    "S": "\033[92m",   # Vert
-    "X": "\033[91m",   # Rouge
-    "T": "\033[93m",   # Jaune/Orange pour tempête
-    "RESET": "\033[0m",
-}
 
 def afficher_grille(grille):
     """
-    Affiche la grille avec coordonnées en en-tête et numéros de ligne.
+    Affiche la grille avec en-tête des colonnes et numéros de ligne.
     """
     # TODO : afficher l'en-tête des colonnes
-    # TODO : pour chaque ligne, afficher le numéro puis les cases
-    # BONUS : appliquer les couleurs selon le contenu
+    # TODO : pour chaque ligne lig, afficher le numéro puis les cases
     pass
 
 
 # Tests exercice 3
 if __name__ == "__main__":
     g = creer_grille()
-    placer(g, "A", 12, "H")
-    placer(g, "D", 3, "D1")
-    placer(g, "G", 7, "S")
-    placer(g, "C", 5, "X")
+    placer(g, 0, 7, "H")
+    placer(g, 3, 2, "D")
+    placer(g, 6, 4, "S")
+    placer(g, 2, 3, "X")
     afficher_grille(g)
 
 
 # -----------------------------------------------------------------------------
-# EXERCICE 4 — Trouver les cases adjacentes
+# EXERCICE 4 — Distance de Chebyshev
 # -----------------------------------------------------------------------------
-# Dans Drone Rescue, les déplacements sont en distance de Chebyshev ≤ 1,
-# ce qui signifie les 8 cases voisines (y compris diagonales).
+# La distance de Chebyshev entre deux cases est :
+#   max(|col1 - col2|, |lig1 - lig2|)
 #
-# Écris une fonction cases_adjacentes(colonne, ligne, taille=12) qui
-# retourne la liste de tuples (col_lettre, ligne_num) de toutes les
-# cases à distance Chebyshev = 1, en restant dans les limites de la grille.
+# Avec des diagonales autorisées, un drone peut atteindre
+# n'importe laquelle des 8 cases adjacentes en 1 déplacement.
+#
+# Écris distance_chebyshev(col1, lig1, col2, lig2) -> int
 # -----------------------------------------------------------------------------
 
-def cases_adjacentes(colonne, ligne, taille=12):
+def distance_chebyshev(col1, lig1, col2, lig2):
     """
-    Retourne la liste des cases voisines (distance Chebyshev = 1).
+    Retourne la distance de Chebyshev entre (col1, lig1) et (col2, lig2).
     """
     # TODO
-    # Convertir colonne lettre → index, générer les 8 directions,
-    # filtrer celles qui sortent de la grille, reconvertir en lettre
     pass
 
 
 # Tests exercice 4
 if __name__ == "__main__":
-    voisins = cases_adjacentes("A", 1)   # coin supérieur gauche
-    print(len(voisins))   # 3 (B1, A2, B2)
-    voisins2 = cases_adjacentes("F", 6)  # case centrale
+    print(distance_chebyshev(0, 0, 0, 0))   # 0 (même case)
+    print(distance_chebyshev(0, 0, 1, 1))   # 1 (diagonale)
+    print(distance_chebyshev(0, 0, 1, 0))   # 1 (horizontal)
+    print(distance_chebyshev(0, 0, 0, 3))   # 3 (vertical)
+    print(distance_chebyshev(2, 3, 5, 7))   # 4 (max(3, 4))
+    print(distance_chebyshev(0, 0, 7, 7))   # 7 (diagonale coin)
+
+
+# -----------------------------------------------------------------------------
+# EXERCICE 5 — Cases à portée de 1 déplacement
+# -----------------------------------------------------------------------------
+# Écris cases_adjacentes(col, lig, taille=8) qui retourne
+# la liste de tuples (col, lig) de toutes les cases à distance Chebyshev = 1,
+# en restant dans les limites [0, taille-1].
+# -----------------------------------------------------------------------------
+
+def cases_adjacentes(col, lig, taille=8):
+    """
+    Retourne la liste des cases voisines (distance Chebyshev = 1).
+    Reste dans la grille [0, taille-1].
+    """
+    # TODO
+    # Générer les 8 directions avec dx, dy dans {-1, 0, 1}
+    # Filtrer celles qui sortent de la grille
+    pass
+
+
+# Tests exercice 5
+if __name__ == "__main__":
+    voisins = cases_adjacentes(0, 0)   # coin supérieur gauche
+    print(len(voisins))   # 3 : (1,0), (0,1), (1,1)
+    voisins2 = cases_adjacentes(3, 3)  # case centrale
     print(len(voisins2))  # 8
     print(sorted(voisins2))  # toutes les 8 directions
