@@ -26,7 +26,7 @@
 ## 2. Quand débloquer les corrections
 
 | Moment | Action |
-|---|---|---|
+|---|---|
 | Après 20 min de blocage | Donner l’indice dans le commentaire de l’exercice |
 | Après 40 min sans avancement | Montrer la signature de la fonction, pas le corps |
 | En fin de séance | Débloquer `corr_0X.py` pour relecture à la maison |
