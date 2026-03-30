@@ -12,9 +12,11 @@
 #     - 1 seule case par déplacement
 #   Recharge hôpital : 1 seule fois par tour par drone
 #
-# Si un mouvement est invalide :
-#   - message d'erreur affiché INLINE (pas dans le log)
-#   - on reste sur la saisie de cible (pas de ok/next)
+# PRINCIPE AFFICHAGE :
+#   - Aucun print() entre render_complet() et input()
+#   - Les erreurs sont passées en paramètre à render_complet() via msg_erreur=
+#     → elles s'affichent inline sur la ligne de prompt, en rouge
+#   - Le log n'est jamais pollué par des erreurs
 # =============================================================================
 
 from modeles import EtatJeu, Drone, Tempete, Position
@@ -64,15 +66,23 @@ def parser_commande(texte: str) -> tuple:
 
 
 # ---------------------------------------------------------------------------
-# Utilitaire : afficher une erreur inline (zone prompt)
+# Prompt inline — jamais de print() autonome
 # ---------------------------------------------------------------------------
 
-def _print_erreur(msg: str):
-    print(f"\033[91m  ✗ {msg}\033[0m")
-
-
-def _print_info(msg: str):
-    print(f"  {msg}")
+def _prompt(texte_prompt: str, msg_erreur: str = None) -> str:
+    """
+    Affiche le prompt et retourne la saisie.
+    Si msg_erreur est fourni, il s'affiche en rouge AVANT le prompt,
+    sur la même zone — sans aucun render() préalable.
+    Le prompt s'affiche avec end="" pour que l'input suive sur la même ligne.
+    """
+    if msg_erreur:
+        print(f"  \033[91m✗ {msg_erreur}\033[0m")
+    print(f"  {texte_prompt}", end="", flush=True)
+    try:
+        return input().strip()
+    except (EOFError, KeyboardInterrupt):
+        return 'q'
 
 
 # ---------------------------------------------------------------------------
@@ -87,38 +97,36 @@ def phase_drones(etat: EtatJeu, log_tour: list) -> bool:
       - MAX_DEPL_DRONE déplacements totaux dans le tour
       - Chaque drone au plus 1 déplacement par tour
       - Séquence : sélection drone → saisie cible (validation immédiate)
-        Si cible invalide : redemander la cible, pas de ok/next
+        Si cible invalide : re-render + erreur sur le prompt, redemander
         Si cible valide   : déplacement exécuté directement (pas de ok)
 
     Retourne False si le joueur veut quitter.
     """
-    # drone_id -> bool : a déjà bougé ce tour
     drones_bouge = {d.identifiant: False for d in etat.drones}
-    # drone_id -> bool : a déjà été rechargé ce tour (hôpital)
     drones_recharges: set = set()
     deplacements_restants = MAX_DEPL_DRONE
     drone_actuel: Drone = None
-
-    render_complet(etat, log_tour, phase='DRONES', depl_restants=deplacements_restants,
-                   entite_selectionnee=None)
+    msg_erreur: str = None
 
     while deplacements_restants > 0:
-        # --- Prompt sélection drone ---
+        # Re-render complet (efface + redessine) — erreur éventuelle affichée après
+        render_complet(etat, log_tour, phase='DRONES', depl_restants=deplacements_restants,
+                       entite_selectionnee=drone_actuel)
+
+        # Prompt adapté selon si un drone est déjà sélectionné
         if drone_actuel is None:
-            print(f"  P1-DRONES | dépl. restants : {deplacements_restants}/{MAX_DEPL_DRONE}"
-                  "  — sélectionner un drone (D1..D6) ou 'next' : ", end="")
+            texte_prompt = (f"P1-DRONES | {deplacements_restants}/{MAX_DEPL_DRONE} dépl."
+                            "  — drone (D1..D6) ou 'next' : ")
         else:
             pos_str = str(drone_actuel.position)
             bat_str = f"bat:{drone_actuel.batterie}/{drone_actuel.batterie_max}"
             surv_str = f" [{drone_actuel.survivant.identifiant}]" if drone_actuel.survivant else ""
-            print(f"  {drone_actuel.identifiant} | {pos_str} | {bat_str}{surv_str}"
-                  f" | dépl. restants : {deplacements_restants}"
-                  "  — cible (ex: E6) ou nouveau drone ou 'next' : ", end="")
+            texte_prompt = (f"{drone_actuel.identifiant} | {pos_str} | {bat_str}{surv_str}"
+                            f" | {deplacements_restants} dépl. restants"
+                            "  — cible (ex: E6) / autre drone / 'next' : ")
 
-        try:
-            saisie = input().strip()
-        except (EOFError, KeyboardInterrupt):
-            return False
+        saisie = _prompt(texte_prompt, msg_erreur)
+        msg_erreur = None  # reset après affichage
 
         type_cmd, valeur = parser_commande(saisie)
 
@@ -126,42 +134,45 @@ def phase_drones(etat: EtatJeu, log_tour: list) -> bool:
             return False
 
         if type_cmd == 'aide':
+            # Aide : render + affiche l'aide en dessous du séparateur
+            render_complet(etat, log_tour, phase='DRONES', depl_restants=deplacements_restants)
             _afficher_aide()
+            input("  [Entrée pour continuer]")
             continue
 
         if type_cmd == 'next':
-            break  # fin de la phase drones volontaire
+            break
 
         if type_cmd == 'drone':
             d = etat.drone_par_id(valeur)
             if d is None:
-                _print_erreur(f"{valeur} : drone inexistant")
+                msg_erreur = f"{valeur} : drone inexistant"
                 continue
             if d.hors_service:
-                _print_erreur(f"{valeur} est hors service")
+                msg_erreur = f"{valeur} est hors service"
                 continue
             if d.est_bloque():
-                _print_erreur(f"{valeur} est bloqué ({d.bloque} tour(s))")
+                msg_erreur = f"{valeur} est bloqué ({d.bloque} tour(s))"
                 continue
             if drones_bouge[valeur]:
-                _print_erreur(f"{valeur} a déjà bougé ce tour (1 déplacement/drone/tour)")
+                msg_erreur = f"{valeur} a déjà bougé ce tour (1 dépl./drone/tour)"
                 continue
             drone_actuel = d
-            _print_info(f"{valeur} sélectionné — position : {d.position}")
+            # Pas de msg_erreur → le re-render au prochain tour montrera le drone sélectionné
             continue
 
         if type_cmd == 'position':
             if drone_actuel is None:
-                _print_erreur("Sélectionner d'abord un drone (D1..D6)")
+                msg_erreur = "Sélectionner d'abord un drone (D1..D6)"
                 continue
             pos = Position.depuis_chaine(valeur)
             if pos is None:
-                _print_erreur(f"{valeur} : coordonnées invalides")
+                msg_erreur = f"{valeur} : coordonnées invalides"
                 continue
             ok, raison = valider_mouvement(etat, drone_actuel, pos)
             if not ok:
-                # Mouvement invalide → redemander la cible (pas de ok/next)
-                _print_erreur(raison)
+                # Mouvement invalide → msg_erreur sur le prochain render, on garde drone_actuel
+                msg_erreur = raison
                 continue
             # Mouvement valide → exécuter directement
             ligne_log = executer_mouvement(etat, drone_actuel, pos, drones_recharges)
@@ -169,12 +180,11 @@ def phase_drones(etat: EtatJeu, log_tour: list) -> bool:
             log_tour.append(ligne_log)
             drones_bouge[drone_actuel.identifiant] = True
             deplacements_restants -= 1
-            drone_actuel = None  # forcer nouvelle sélection
-            render_complet(etat, log_tour, phase='DRONES', depl_restants=deplacements_restants,
-                           entite_selectionnee=None)
+            drone_actuel = None
+            # Le re-render au début du prochain tour affichera l'état mis à jour
             continue
 
-        _print_erreur(f"Commande inconnue : '{saisie}'  (aide : ?)")  
+        msg_erreur = f"Commande inconnue : '{saisie}'  (aide : ?)"
 
     return True
 
@@ -191,7 +201,7 @@ def phase_tempetes(etat: EtatJeu, log_tour: list) -> bool:
       - MAX_DEPL_TEMPETE déplacements totaux dans le tour
       - Chaque tempête au plus 1 déplacement par tour
       - Séquence : sélection tempête → saisie cible
-        Si cible invalide : redemander la cible
+        Si cible invalide : re-render + erreur inline, redemander
         Si cible valide   : déplacement exécuté directement
 
     Retourne False si le joueur veut quitter.
@@ -199,30 +209,31 @@ def phase_tempetes(etat: EtatJeu, log_tour: list) -> bool:
     tempetes_bougees = {t.identifiant: False for t in etat.tempetes}
     deplacements_restants = MAX_DEPL_TEMPETE
     tempete_actuelle: Tempete = None
-
-    render_complet(etat, log_tour, phase='TEMPETES', depl_restants=deplacements_restants,
-                   entite_selectionnee=None)
+    msg_erreur: str = None
 
     while deplacements_restants > 0:
-        if tempete_actuelle is None:
-            print(f"  P2-TEMPETES | dépl. restants : {deplacements_restants}/{MAX_DEPL_TEMPETE}"
-                  "  — sélectionner une tempête (T1..T4) ou 'next' : ", end="")
-        else:
-            print(f"  {tempete_actuelle.identifiant} | {tempete_actuelle.position}"
-                  f" | dépl. restants : {deplacements_restants}"
-                  "  — cible (ex: K3) ou autre tempête ou 'next' : ", end="")
+        render_complet(etat, log_tour, phase='TEMPETES', depl_restants=deplacements_restants,
+                       entite_selectionnee=tempete_actuelle)
 
-        try:
-            saisie = input().strip()
-        except (EOFError, KeyboardInterrupt):
-            return False
+        if tempete_actuelle is None:
+            texte_prompt = (f"P2-TEMPETES | {deplacements_restants}/{MAX_DEPL_TEMPETE} dépl."
+                            "  — tempête (T1..T4) ou 'next' : ")
+        else:
+            texte_prompt = (f"{tempete_actuelle.identifiant} | {tempete_actuelle.position}"
+                            f" | {deplacements_restants} dépl. restants"
+                            "  — cible (ex: K3) / autre tempête / 'next' : ")
+
+        saisie = _prompt(texte_prompt, msg_erreur)
+        msg_erreur = None
 
         type_cmd, valeur = parser_commande(saisie)
 
         if type_cmd == 'quitter':
             return False
         if type_cmd == 'aide':
+            render_complet(etat, log_tour, phase='TEMPETES', depl_restants=deplacements_restants)
             _afficher_aide()
+            input("  [Entrée pour continuer]")
             continue
         if type_cmd == 'next':
             break
@@ -230,26 +241,25 @@ def phase_tempetes(etat: EtatJeu, log_tour: list) -> bool:
         if type_cmd == 'tempete':
             t = etat.tempete_par_id(valeur)
             if t is None:
-                _print_erreur(f"{valeur} : tempête inexistante")
+                msg_erreur = f"{valeur} : tempête inexistante"
                 continue
             if tempetes_bougees[valeur]:
-                _print_erreur(f"{valeur} a déjà bougé ce tour (1 déplacement/tempête/tour)")
+                msg_erreur = f"{valeur} a déjà bougé ce tour (1 dépl./tempête/tour)"
                 continue
             tempete_actuelle = t
-            _print_info(f"{valeur} sélectionnée — position : {t.position}")
             continue
 
         if type_cmd == 'position':
             if tempete_actuelle is None:
-                _print_erreur("Sélectionner d'abord une tempête (T1..T4)")
+                msg_erreur = "Sélectionner d'abord une tempête (T1..T4)"
                 continue
             pos = Position.depuis_chaine(valeur)
             if pos is None:
-                _print_erreur(f"{valeur} : coordonnées invalides")
+                msg_erreur = f"{valeur} : coordonnées invalides"
                 continue
             ok, raison = valider_mouvement_tempete(etat, tempete_actuelle, pos)
             if not ok:
-                _print_erreur(raison)
+                msg_erreur = raison
                 continue
             ligne_log = executer_mouvement_tempete(etat, tempete_actuelle, pos)
             log_action(etat, ligne_log)
@@ -257,11 +267,9 @@ def phase_tempetes(etat: EtatJeu, log_tour: list) -> bool:
             tempetes_bougees[tempete_actuelle.identifiant] = True
             deplacements_restants -= 1
             tempete_actuelle = None
-            render_complet(etat, log_tour, phase='TEMPETES', depl_restants=deplacements_restants,
-                           entite_selectionnee=None)
             continue
 
-        _print_erreur(f"Commande inconnue : '{saisie}'  (aide : ?)")
+        msg_erreur = f"Commande inconnue : '{saisie}'  (aide : ?)"
 
     return True
 
