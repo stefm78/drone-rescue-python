@@ -35,24 +35,33 @@ def boucle_de_jeu(etat):
     Alterne les phases J1 et J2 jusqu'à la fin de partie.
     """
     while not etat["partie_finie"]:
-        # ── Phase J1 : Drones ─────────────────────────────────────────────────────────────
+        # ── Phase J1 : Drones ──────────────────────────────────────────────────
         _phase_drones(etat)
         if etat["partie_finie"]:
             break
 
-        # ── Phase J2 : Tempêtes (manuelle) ────────────────────────────────────────────
+        # ── Phase J2 : Tempêtes (manuelle) ────────────────────────────────────
         _phase_tempetes(etat)
         if etat["partie_finie"]:
             break
 
-        # ── Phase automatique : météo + propagation ─────────────────────────────────────
+        # ── Phase automatique : météo ──────────────────────────────────────────
         logs_meteo = deplacer_tempetes(etat)
-        logs_x = propager_zones_x(etat)
-        for ligne in logs_meteo + logs_x:
+        for ligne in logs_meteo:
             etat["historique"].append(ligne)
             enregistrer_log(ligne)
 
-        # ── Vérification fin de partie ────────────────────────────────────────────────
+        # Vérification fin de partie après météo (tempêtes peuvent bloquer tous les drones)
+        if verifier_fin_partie(etat):
+            break
+
+        # ── Propagation zones X ────────────────────────────────────────────────
+        logs_x = propager_zones_x(etat)
+        for ligne in logs_x:
+            etat["historique"].append(ligne)
+            enregistrer_log(ligne)
+
+        # ── Vérification fin de partie ─────────────────────────────────────────
         if verifier_fin_partie(etat):
             break
 
@@ -82,10 +91,13 @@ def _phase_drones(etat):
         render_complet(etat, phase="P1-DRONES",
                        depl_restants=MAX_DEPL_DRONE - depl_effectues)
 
-        # Drones encore disponibles ce tour
+        # Drones disponibles : ni hors service, ni bloqués, ni batterie vide,
+        # ni déjà déplacés ce tour
         drones_dispo = [
             did for did, d in etat["drones"].items()
-            if not d["hors_service"] and not d["bloque"] > 0
+            if not d["hors_service"]
+            and d["bloque"] == 0
+            and d["batterie"] > 0
             and did not in drones_deplaces
         ]
         if not drones_dispo:
@@ -115,9 +127,10 @@ def _phase_drones(etat):
         if drone["bloque"] > 0:
             print(f"{saisie} est bloqué ({drone['bloque']} tour(s) restant(s)).")
             continue
+        if drone["batterie"] <= 0:
+            print(f"{saisie} n'a plus de batterie.")
+            continue
 
-        render_complet(etat, phase="P1-DRONES",
-                       depl_restants=MAX_DEPL_DRONE - depl_effectues)
         pos_drone = _pos_str((drone["col"], drone["lig"]))
         dest_str = input(f"{saisie} en {pos_drone} → destination (ex: B3) : ").strip()
 
@@ -178,8 +191,6 @@ def _phase_tempetes(etat):
             continue
 
         tempete = etat["tempetes"][saisie]
-        render_complet(etat, phase="P2-TEMPETES",
-                       depl_restants=MAX_DEPL_TEMPETE - depl_effectues)
         pos_t = _pos_str((tempete["col"], tempete["lig"]))
         dest_str = input(f"{saisie} en {pos_t} → destination : ").strip()
 
