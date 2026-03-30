@@ -18,71 +18,61 @@ Fil rouge : construire un jeu de simulation de sauvetage par drones en console.
 
 ---
 
-## 2. État actuel (30 mars 2026)
+## 2. État actuel (30 mars 2026 — mis à jour 09h42)
 
 ### ✅ Complet
 
 | Dossier | Fichiers | État |
 |---|---|---|
-| `cours/` | `00` à `09` (10 fichiers `.md`) | ✅ présents |
-| `exercices/` | `ex_01` à `ex_08` (8 fichiers `.py`) | ✅ présents |
-| `corrections/` | `corr_01` à `corr_08` (8 fichiers `.py`) | ✅ présents |
+| `cours/` | `00` à `09` (10 fichiers `.md`) | ✅ présents + enrichis (01-03-05) |
+| `exercices/` | `ex_01` à `ex_08` (8 fichiers `.py`) | ✅ présents — ex_03 harmonisé |
+| `corrections/` | `corr_01` à `corr_08` (8 fichiers `.py`) | ✅ présents — corr_03 + corr_05 réécrites |
 | `jeu/` | `config.py`, `modeles.py`, `logique.py`, `affichage.py`, `console.py`, `logger.py`, `main.py` | ✅ présents |
+| `notebooks/` | `nb_01` à `nb_05` (5 fichiers `.ipynb`) | ✅ créés (30 mars 2026) |
 
-### ❌ Absent
+### ❌ Absent / À faire
 
-- Aucun notebook Jupyter (`.ipynb`) — prévu dans le `prompt.md`
-- Pas de dossier `notebooks/`
+- `cours/04`, `06`, `07`, `08` : pas encore enrichis (sections Erreurs classiques + QCM manquantes)
+- `corrections/corr_06`, `corr_07`, `corr_08` : à vérifier cohérence POO avec cours 05
+- `GUIDE_FORMATEUR.md` : non créé
+- `argparse` dans `jeu/main.py` : documenté dans cours/09 mais non implémenté
 
-### ⚠️ Incohérences à corriger
+### ✅ Incohérences corrigées
 
-Voir section 4 ci-dessous.
+| # | Problème | Statut |
+|---|---|---|
+| 1 | Convention col int vs str | ✅ Corrigé — cours/01, 03, 05 + ex_03 + corr_03 + corr_05 |
+| 2 | corr_05 non aligné avec cours 05 | ✅ Corrigé — réécriture complète avec EntiteGrille + @property |
+| 3 | Aucun notebook .ipynb | ✅ Corrigé — notebooks/nb_01 à nb_05 créés |
+| 4 | Fiches 01-03-05 trop courtes | ✅ Corrigé — Erreurs classiques + QCM ajoutés |
+
+### ⏳ Incohérences restantes
+
+| # | Fichier(s) | Problème | Correction |
+|---|---|---|---|
+| 4b | `cours/04`, `06`, `07`, `08` | Fiches sans Erreurs classiques ni QCM | Enrichir (voir §3 P3) |
+| 5 | `cours/09_assemblage_final.md` | Options CLI documentées mais non implémentées dans `jeu/main.py` | Implémenter `argparse` ou retirer de la doc |
+| 6 | `corr_06`, `corr_07`, `corr_08` | À vérifier cohérence convention + POO | Revoir après P3 |
 
 ---
 
 ## 3. Tâches par priorité
 
-### 🔴 PRIORITÉ 1 — Harmoniser les conventions (avant tout le reste)
+### ✅ PRIORITÉ 1 — Harmoniser les conventions — TERMINÉE
 
-**Problème :** deux conventions de représentation des colonnes coexistent dans le repo :
-
-| Convention | Fichiers concernés | Exemple |
-|---|---|---|
-| **Index entier 0-based** | `cours/01` à `05`, `jeu/modeles.py`, `jeu/logique.py` | `col=0` pour colonne A |
-| **Lettre str** | `exercices/ex_05` à `ex_08`, `corrections/corr_05` à `corr_08` | `colonne="A"` |
-
-**Décision à prendre (une seule, à tenir dans tout le repo) :**
-La convention **lettre str** (ex. `"A"`) est plus lisible pour un débutant et plus
-proche de l'interface console. **Elle doit devenir la convention unique.**
-
-**Fichiers à mettre à jour :**
-- `cours/01_structures_de_base.md` — remplacer `col: int (0-based)` par `colonne: str`
-- `cours/05_classes_et_objets.md` — remplacer `col: int` / `'ABCDEFGHIJKL'[col]` par `colonne: str`
-- `exercices/ex_03_fonctions.py` — les fonctions `distance_chebyshev`, `est_dans_grille`, `valider_mouvement_drone` utilisent des `int` → les réécrire avec lettres et conversion interne via `ord()`
-- `corrections/corr_03_fonctions.py` — aligner sur le nouvel ex_03
-- `jeu/modeles.py` — vérifier que toutes les classes utilisent `colonne: str`
-- `jeu/logique.py` — vérifier les fonctions de déplacement
-
-**Convention finale à utiliser partout :**
+Convention définitive appliquée partout :
 ```python
-# Bonne convention (lettre str)
-colonne = "A"  # str, une lettre majuscule A-L
-ligne   = 1    # int, 1-based (1 à 12)
-
-# Conversion interne quand nécessaire
-idx_col = ord(colonne) - ord('A')  # 0 à 11
-idx_lig = ligne - 1                # 0 à 11
+colonne: str   # lettre majuscule "A" à "L"
+ligne:   int   # entier 1-based, 1 à 12
+# Conversion interne : ord(colonne) - ord('A')  →  index 0-based
 ```
+Fichiers modifiés : `cours/01`, `cours/03`, `cours/05`, `exercices/ex_03`, `corrections/corr_03`, `corrections/corr_05`.
 
 ---
 
-### 🔴 PRIORITÉ 2 — Créer les notebooks Jupyter
+### ✅ PRIORITÉ 2 — Créer les notebooks Jupyter — TERMINÉE
 
-**Pourquoi :** le `prompt.md` spécifie explicitement « fiches, notebooks Jupyter ET exercices
-interactifs ». Les notebooks sont indispensables pour les débutants qui veulent exécuter
-le code cellule par cellule sans configurer un environnement complet.
-
-**Créer le dossier `notebooks/` avec 5 fichiers `.ipynb` :**
+5 notebooks créés dans `notebooks/` :
 
 ```
 notebooks/
@@ -93,116 +83,64 @@ notebooks/
 └── nb_05_classes.ipynb
 ```
 
-**Structure type pour chaque notebook (à respecter) :**
+Compatibles Google Colab (stdlib uniquement, pas d'installation requise).
 
+Structure de chaque notebook :
 ```
-Cellule 1 : Markdown — titre + objectifs du module
-Cellule 2 : Markdown — concept expliqué (copié/adapté du cours .md)
-Cellule 3 : Code     — exemple minimal exécutable
+Cellule 1 : Markdown — titre + objectifs
+Cellule 2 : Markdown — concepts expliqués
+Cellule 3 : Code     — exemples exécutables
 Cellule 4 : Markdown — lien avec Drone Rescue
-Cellule 5 : Code     — exemple tiré du jeu (exécutable)
-Cellule 6 : Markdown — «  À toi de jouer » (mini-exercice inline)
-Cellule 7 : Code     — squelette de l'exercice (avec `pass` ou `...`)
-Cellule 8 : Code     — solution masquée (cellule tagged `solution`)
-```
-
-**Compatibilité cible :** Google Colab (pas d'import externe, stdlib uniquement).
-Ajouter en première cellule de chaque notebook :
-```python
-# Compatible Google Colab — aucune installation requise
+Cellule 5 : Code     — exemple jeu exécutable
+Cellule 6 : Markdown — «À toi de jouer»
+Cellule 7 : Code     — squelette (pass)
+Cellule 8 : Code     — solution (tag: solution)
 ```
 
 ---
 
-### 🟡 PRIORITÉ 3 — Étoffer les fiches de cours
+### 🟡 PRIORITÉ 3 — Étoffer les fiches de cours — PARTIELLE
 
-Les fiches actuelles font entre 1 900 et 4 700 octets.
-Pour être vraiment utiles à un débutant autonome,
-elles devraient au minimum **doubler de volume**.
+✅ Fait : `cours/01`, `cours/02`, `cours/03`, `cours/05`
+⏳ Reste : `cours/04`, `cours/06`, `cours/07`, `cours/08`
 
-**Pour chaque fichier `cours/0X_*.md`, ajouter :**
+**Pour chaque fichier restant, ajouter :**
 
-1. **Section `## Erreurs classiques`** (2 à 4 exemples)
-   - Montrer le code faux + le message d'erreur Python exact
-   - Montrer la correction
-   - Exemple pour module 01 :
-     ```python
-     # ❌ Erreur fréquente — modifier une liste pendant une boucle for
-     drones = ["D1", "D2", "D3"]
-     for d in drones:
-         if d == "D2":
-             drones.remove(d)  # → comportement inattendu
-
-     # ✅ Correct — itérer sur une copie
-     for d in drones[:]:
-         if d == "D2":
-             drones.remove(d)
-     ```
-
-2. **Section `## Exercice de compréhension` (QCM ou vrai/faux)**
-   - 3 questions à choix multiple directement dans le Markdown
-   - Réponses en spoiler `<details><summary>Réponse</summary>...</details>`
-
-3. **Enrichissement de la section `## Lien avec le projet`**
-   - Ajouter un second exemple de code (plus complexe que l'actuel)
-   - Montrer comment le concept est utilisé dans `jeu/` (référence au fichier exact)
-
-**Modules à enrichir par ordre de priorité :**
+1. **Section `## Erreurs classiques`** (3-4 exemples ❌/✅ avec message d'erreur Python réel)
+2. **Section `## Exercice de compréhension`** (3 QCM avec `<details>` spoiler)
+3. **Enrichissement `## Lien avec le projet`** (second exemple + référence fichier `jeu/`)
 
 | Module | Fichier | Lacune principale |
 |---|---|---|
-| 01 | `01_structures_de_base.md` | Erreurs classiques absentes |
-| 02 | `02_boucles_et_conditions.md` | Exemple jeu trop simple |
-| 03 | `03_fonctions.md` | Pas de section sur les erreurs TypeError/ValueError |
-| 04 | `04_modules_et_io.md` | Pas d'exemple de `try/except` pour les fichiers |
-| 05 | `05_classes_et_objets.md` | @property présent en cours mais absent des exercices |
-| 06 | `06_grille_et_affichage.md` | Manque explication des codes ANSI |
-| 07 | `07_logique_de_jeu.md` | Le plus complet — juste enrichir les erreurs |
-| 08 | `08_console_et_log.md` | Manque section sur `re` (expressions régulières) |
+| 04 | `04_modules_et_io.md` | Pas d'exemple `try/except` pour fichiers |
+| 06 | `06_grille_et_affichage.md` | Manque explication codes ANSI |
+| 07 | `07_logique_de_jeu.md` | Enrichir les erreurs |
+| 08 | `08_console_et_log.md` | Manque section sur `re` |
 
 ---
 
-### 🟡 PRIORITÉ 4 — Aligner corr_05 à corr_08 avec le style POO du cours 05
+### 🟡 PRIORITÉ 4 — Aligner corr_06 à corr_08 avec le style POO du cours 05
 
-**Problème :** `corrections/corr_05_classes.py` définit des classes `Position`, `Drone`,
-`Entite`, `Tempete` avec une convention lettre-str — mais `cours/05_classes_et_objets.md`
-définit une hiérarchie `EntiteGrille` → `Drone` / `Tempete` / `Survivant` avec `@property`.
-Un étudiant qui compare les deux sera déconcerté.
-
-**Ce qu'il faut faire :**
-- Après avoir appliqué la PRIORITÉ 1 (convention lettre-str),
-  réécrire `corr_05_classes.py` pour utiliser `EntiteGrille` comme classe de base
-  (exactement comme dans le cours), ajouter `@property est_hs` et `@property est_bloque`
-  sur `Drone`.
-- Vérifier que `corr_06`, `corr_07`, `corr_08` importent ou réutilisent ces classes
-  harmonisées (ou redéfinissent localement de manière cohérente).
+✅ `corr_05` réécrit (EntiteGrille + @property + convention str).
+⏳ Vérifier que `corr_06`, `corr_07`, `corr_08` :
+- Utilisent `colonne: str`, `ligne: int` (convention définitive)
+- Réutilisent ou redéfinissent `EntiteGrille` / `Drone` / `Tempete` / `Survivant` de manière cohérente
+- Ne mélangent pas les deux conventions
 
 ---
 
 ### 🟢 PRIORITÉ 5 — Ajouter un guide formateur
 
 Créer `GUIDE_FORMATEUR.md` à la racine avec :
-- Planning type semaine par semaine (déjà dans README, à détailler)
+- Planning type semaine par semaine (détailler depuis README)
 - Conseils d'animation : quand débloquer les corrections
-- Comment évaluer l'apprenant (grille de compétences)
+- Grille d'évaluation des compétences apprenant
 - Comment étendre le projet (nouvelles entités, nouvelles règles)
-- Dépendances entre fichiers `jeu/` (reprendre le graphe de `09_assemblage_final.md`)
+- Graphe de dépendances `jeu/` (depuis `09_assemblage_final.md`)
 
 ---
 
-## 4. Récapitulatif des incohérences connues
-
-| # | Fichier(s) | Problème | Correction |
-|---|---|---|---|
-| 1 | `cours/01`, `cours/05`, `ex_03`, `corr_03`, `jeu/modeles.py` | Convention col int vs str | Uniformiser sur str lettre (voir §3 P1) |
-| 2 | `corr_05_classes.py` | Classes non alignées avec cours 05 | Réécrire avec `EntiteGrille` + `@property` |
-| 3 | Tout le repo | Aucun notebook `.ipynb` | Créer `notebooks/` (voir §3 P2) |
-| 4 | `cours/01` à `08` | Fiches trop courtes, pas d'erreurs classiques | Enrichir chaque fiche (voir §3 P3) |
-| 5 | `cours/09_assemblage_final.md` | Options CLI (`--seed`, `--grille`, etc.) documentées mais non implémentées dans `jeu/main.py` | Soit implémenter `argparse` dans `main.py`, soit retirer de la doc |
-
----
-
-## 5. Conventions de style à respecter
+## 4. Conventions de style à respecter
 
 Tout nouveau contenu doit respecter ces conventions, sans exception.
 
@@ -210,14 +148,14 @@ Tout nouveau contenu doit respecter ces conventions, sans exception.
 
 ```
 # Module XX — Titre
-## Concepts couverts       ← liste bullet
-## Lien avec le projet     ← exemple code Python
-## Erreurs classiques      ← À AJOUTER (voir §3 P3)
-## Exercice de compréhension ← À AJOUTER (voir §3 P3)
-## Exercices du module     ← renvoi vers exercices/
-## Tips et best practices  ← liste bullet
-## Références              ← liens docs.python.org + realpython
-## Prompts IA              ← 3 phrases copiables
+## Concepts couverts          ← liste bullet
+## Lien avec le projet        ← exemple code Python
+## Erreurs classiques         ← 3-4 blocs ❌/✅
+## Exercice de compréhension  ← 3 QCM avec <details>
+## Exercices du module        ← renvoi vers exercices/
+## Tips et best practices     ← liste bullet
+## Références                 ← liens docs.python.org + realpython
+## Prompts IA                 ← 3 phrases copiables
 ```
 
 ### Fichiers `.py` (exercices)
@@ -228,6 +166,7 @@ Tout nouveau contenu doit respecter ces conventions, sans exception.
 # Module : cours/0X_*.md
 # ============================================================
 # Objectifs : liste bullet
+# Convention : colonne str 'A'..'L', ligne int 1-based 1..12
 # ============================================================
 
 # ----------------------------------------------------------
@@ -244,6 +183,8 @@ Tout nouveau contenu doit respecter ces conventions, sans exception.
 # ============================================================
 # CORRECTION XX — Titre
 # ============================================================
+# Convention : colonne str 'A'..'L', ligne int 1-based 1..12
+# ============================================================
 
 # ----------------------------------------------------------
 # CORRECTION X — Sous-thème
@@ -252,6 +193,13 @@ Tout nouveau contenu doit respecter ces conventions, sans exception.
 # Code complet et fonctionnel
 # Tests assert identiques à l'exercice
 ```
+
+### Fichiers `.ipynb` (notebooks)
+
+- Compatibles Google Colab (stdlib uniquement)
+- Première cellule code : `# Compatible Google Colab — aucune installation requise`
+- Structure 8 cellules (voir §3 P2)
+- Cellule solution : metadata `{"tags": ["solution"]}`
 
 ### Convention de coordonnées (définitive)
 
@@ -266,7 +214,7 @@ idx_lig = ligne - 1                # 0 à 11
 
 ---
 
-## 6. Prompt de reprise pour une IA
+## 5. Prompt de reprise pour une IA
 
 Colle ce bloc dans n'importe quelle IA pour reprendre le projet :
 
@@ -280,17 +228,21 @@ Lis d'abord ces fichiers dans l'ordre :
 Conventions obligatoires :
   - Colonnes : str lettre "A"-"L" (jamais int 0-based)
   - Lignes   : int 1-based (1 à 12)
-  - Style cours    : voir ROADMAP.md §5
-  - Style exercices: voir ROADMAP.md §5
-  - Style corrections: voir ROADMAP.md §5
+  - Style cours       : voir ROADMAP.md §4
+  - Style exercices   : voir ROADMAP.md §4
+  - Style corrections : voir ROADMAP.md §4
+  - Style notebooks   : voir ROADMAP.md §4
   - Compatibilité : Python 3.10+, stdlib uniquement, Google Colab pour les .ipynb
 
-Commence par la tâche de PRIORITÉ 1 (harmonisation des conventions),
-puis PRIORITÉ 2 (notebooks), puis PRIORITÉ 3 (enrichissement des cours).
+Priorités restantes :
+  - PRIORITÉ 3 : enrichir cours/04, 06, 07, 08 (Erreurs classiques + QCM)
+  - PRIORITÉ 4 : vérifier corr_06, corr_07, corr_08 (convention + POO)
+  - PRIORITÉ 5 : créer GUIDE_FORMATEUR.md
+
 Ne tronque rien, ne mets pas de placeholder, chaque fichier doit être
 prêt à être poussé directement dans le repo GitHub.
 ```
 
 ---
 
-*Dernière mise à jour : 30 mars 2026 — généré après audit complet du repo.*
+*Dernière mise à jour : 30 mars 2026 09h42 CEST — P1 ✅ P2 ✅ P3 partielle ✅*
