@@ -6,7 +6,7 @@
 #   python tests/test_logique.py
 #
 # Couvre : initialisation, validation mouvement, exécution, propagation,
-#          fin de partie, coûts officiels.
+#          fin de partie, coûts officiels, collision tempête (PR #11).
 # =============================================================================
 
 import sys
@@ -172,6 +172,80 @@ def test_cout_zone_x():
 
 
 # ---------------------------------------------------------------------------
+# Tests collision tempête — PR #11
+# ---------------------------------------------------------------------------
+
+def test_tempete_bloque_drone_2_tours():
+    """Un drone entrant dans une tempête est bloqué 2 tours."""
+    etat, drone = _etat_minimal()
+    drone["col"], drone["lig"] = 3, 3
+    drone["batterie"] = 10
+    cible = (4, 3)
+    etat["tempetes"].append({"col": 4, "lig": 3})  # tempête sur la cible
+    executer_mouvement(etat, drone, cible, set())
+    assert drone["bloque"] == 2, f"Attendu bloque=2, got {drone['bloque']}"
+
+
+def test_tempete_consomme_batterie_deplacement_normal():
+    """Collision tempête sans survivant : batterie consommée = 1 (coût normal)."""
+    etat, drone = _etat_minimal()
+    drone["col"], drone["lig"] = 3, 3
+    drone["batterie"] = 10
+    bat_avant = drone["batterie"]
+    cible = (4, 3)
+    etat["tempetes"].append({"col": 4, "lig": 3})
+    executer_mouvement(etat, drone, cible, set())
+    assert drone["batterie"] == bat_avant - 1, (
+        f"Batterie devrait être {bat_avant - 1}, got {drone['batterie']} — "
+        "bug PR#11 : batterie non consommée lors d'une collision tempête"
+    )
+
+
+def test_tempete_consomme_batterie_avec_survivant():
+    """Collision tempête avec survivant : batterie consommée = COUT_TRANSPORT."""
+    etat, drone = _etat_minimal()
+    drone["col"], drone["lig"] = 3, 3
+    drone["batterie"] = 10
+    drone["survivant"] = "S1"
+    etat["survivants"]["S1"] = {"id": "S1", "col": 3, "lig": 3, "etat": "embarque"}
+    bat_avant = drone["batterie"]
+    cible = (4, 3)
+    etat["tempetes"].append({"col": 4, "lig": 3})
+    executer_mouvement(etat, drone, cible, set())
+    assert drone["batterie"] == bat_avant - COUT_TRANSPORT, (
+        f"Batterie devrait être {bat_avant - COUT_TRANSPORT}, got {drone['batterie']}"
+    )
+
+
+def test_tempete_zone_x_consomme_batterie_supplementaire():
+    """Collision tempête sur case zone X : coût = 1 + COUT_ZONE_X."""
+    etat, drone = _etat_minimal()
+    drone["col"], drone["lig"] = 3, 3
+    drone["batterie"] = 10
+    bat_avant = drone["batterie"]
+    cible = (4, 3)
+    etat["tempetes"].append({"col": 4, "lig": 3})
+    etat["zones_x"].add(cible)  # la case tempête est aussi une zone X
+    executer_mouvement(etat, drone, cible, set())
+    assert drone["batterie"] == bat_avant - (1 + COUT_ZONE_X), (
+        f"Attendu {bat_avant - (1 + COUT_ZONE_X)}, got {drone['batterie']}"
+    )
+
+
+def test_tempete_batterie_zero_met_hors_service():
+    """Drone avec exactement 1 batterie + collision tempête → hors_service=True et bloque=2."""
+    etat, drone = _etat_minimal()
+    drone["col"], drone["lig"] = 3, 3
+    drone["batterie"] = 1  # coût normal = 1 → batterie tombe à 0
+    cible = (4, 3)
+    etat["tempetes"].append({"col": 4, "lig": 3})
+    executer_mouvement(etat, drone, cible, set())
+    assert drone["batterie"] == 0
+    assert drone["hors_service"] is True, "Drone à 0 batterie doit être hors service"
+    assert drone["bloque"] == 2, "Drone hors service + tempête doit rester bloqué 2 tours"
+
+
+# ---------------------------------------------------------------------------
 # Tests recharge hôpital
 # ---------------------------------------------------------------------------
 
@@ -283,10 +357,19 @@ if __name__ == "__main__":
         test_cout_deplacement_normal,
         test_cout_transport_survivant,
         test_cout_zone_x,
+        # --- collision tempête (PR #11) ---
+        test_tempete_bloque_drone_2_tours,
+        test_tempete_consomme_batterie_deplacement_normal,
+        test_tempete_consomme_batterie_avec_survivant,
+        test_tempete_zone_x_consomme_batterie_supplementaire,
+        test_tempete_batterie_zero_met_hors_service,
+        # --- recharge ---
         test_recharge_hopital,
         test_recharge_hopital_pas_double,
+        # --- propagation ---
         test_propager_zones_x_retourne_une_ligne_ou_zero,
         test_propager_zones_x_pas_sur_hopital,
+        # --- fin de partie ---
         test_verifier_fin_victoire,
         test_verifier_fin_defaite_tours,
         test_verifier_fin_defaite_tous_hs,
