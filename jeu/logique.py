@@ -179,6 +179,10 @@ def valider_mouvement(etat, drone, cible):
     """
     Vérifie si le drone (dict) peut se déplacer vers cible (col, lig).
     Retourne (True, "") ou (False, raison).
+
+    RÈGLE BATTERIE : le drone doit avoir strictement plus de batterie que le
+    coût prévu du déplacement. Si batterie <= coût, il tombera à 0 avant
+    d'arriver et le mouvement est interdit (le drone reste sur place, HS).
     """
     did = drone["id"]
     if drone["hors_service"]:
@@ -193,6 +197,17 @@ def valider_mouvement(etat, drone, cible):
         return False, f"Case bloquée par un bâtiment"
     if drone["batterie"] <= 0:
         return False, f"{did} n'a plus de batterie"
+
+    # Vérification anticipée : la batterie suffit-elle pour atteindre la cible ?
+    cout = COUT_TRANSPORT if drone["survivant"] else 1
+    if cible in etat["zones_x"]:
+        cout += COUT_ZONE_X
+    if drone["batterie"] < cout:
+        return False, (
+            f"{did} batterie insuffisante ({drone['batterie']} unité(s) "
+            f"disponible, {cout} nécessaire(s)) — déplacement annulé"
+        )
+
     return True, ""
 
 
@@ -251,6 +266,11 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     """
     Déplace le drone vers cible, applique les règles officielles.
     Retourne une ligne de log.
+
+    RÈGLE BATTERIE : si la batterie passe à 0 pendant le trajet, le drone
+    n'atteint pas la cible — il reste à sa position de départ et devient HS.
+    La validation (valider_mouvement) doit avoir vérifié cela en amont ;
+    cette fonction applique quand même la règle en garde-fou.
     """
     did = drone["id"]
     depart = (drone["col"], drone["lig"])
@@ -271,6 +291,16 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     # Coût supplémentaire zone X
     if cible in etat["zones_x"]:
         cout += COUT_ZONE_X
+
+    # Garde-fou : batterie insuffisante pour atteindre la cible
+    # (ne devrait pas survenir si valider_mouvement a été appelé, mais
+    #  on couvre le cas d'un appel direct sans validation préalable)
+    if drone["batterie"] < cout:
+        drone["batterie"] = 0
+        drone["hors_service"] = True
+        _mettre_a_jour_grille(etat)
+        return _log(etat, did, depart, depart, bat_avant, 0,
+                    "HS (batterie insuffisante en vol)")
 
     drone["batterie"] = max(0, drone["batterie"] - cout)
     drone["col"], drone["lig"] = cible
@@ -305,7 +335,7 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
                 surv_id = s["id"]
                 evenement = f"PRISE {s['id']}"
 
-    # Hors service ?
+    # Hors service si batterie tombe à 0 après déplacement
     if drone["batterie"] <= 0:
         drone["hors_service"] = True
         evenement = "HS"
@@ -379,11 +409,13 @@ def propager_zones_x(etat):
     Tous les PROPAGATION_FREQUENCE tours, les zones X s'étendent.
     Chaque voisin orthogonal d'une zone X existante a PROBA_PROPAGATION
     de devenir une nouvelle zone X.
-    Retourne la liste des lignes de log (préfixées [X] pour visibilité).
+
+    LOG COMPACT : une seule ligne résume toute la propagation du tour,
+    avec la liste des nouvelles positions séparées par des virgules.
+    Format : T03  [X] PROPAGATION  +3 → A2, B4, C1
     """
-    logs = []
     if etat["tour"] % PROPAGATION_FREQUENCE != 0:
-        return logs
+        return []
 
     nouvelles = set()
     hopital = etat["hopital"]
@@ -402,18 +434,18 @@ def propager_zones_x(etat):
                 nouvelles.add(voisin)
 
     if nouvelles:
-        # Ligne de résumé en tête (toujours visible dans le log)
-        logs.append(
-            f"T{etat['tour']:02d}  [X] PROPAGATION  +{len(nouvelles)} zone(s) dangereuse(s)"
-        )
-        for pos in sorted(nouvelles):
+        for pos in nouvelles:
             etat["zones_x"].add(pos)
-            logs.append(f"T{etat['tour']:02d}  [X]   +{_pos_str(pos)}")
+        positions_str = ", ".join(_pos_str(p) for p in sorted(nouvelles))
+        log_line = (
+            f"T{etat['tour']:02d}  [X] PROPAGATION  "
+            f"+{len(nouvelles)} → {positions_str}"
+        )
     else:
-        logs.append(f"T{etat['tour']:02d}  [X] PROPAGATION  aucune extension ce tour")
+        log_line = f"T{etat['tour']:02d}  [X] PROPAGATION  aucune extension ce tour"
 
     _mettre_a_jour_grille(etat)
-    return logs
+    return [log_line]
 
 
 # ---------------------------------------------------------------------------
