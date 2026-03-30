@@ -14,8 +14,7 @@
 
 from config import (
     GRILLE_TAILLE, NB_DRONES, NB_TEMPETES, NB_BATIMENTS, NB_SURVIVANTS,
-    BATTERIE_MAX, BATTERIE_INIT, NB_ZONES_DANGER,
-    HOPITAL_COL, HOPITAL_LIG
+    BATTERIE_MAX, BATTERIE_INIT, NB_ZONES_DANGER
 )
 import random
 
@@ -110,8 +109,13 @@ class Batiment:
 # ---------------------------------------------------------------------------
 
 class Hopital:
-    def __init__(self):
-        self.position = Position(HOPITAL_COL, HOPITAL_LIG)
+    """
+    L'hôpital est positionné aléatoirement à la création (via EtatJeu).
+    Sa position est passée en paramètre ; si None, elle sera assignée plus tard.
+    """
+    def __init__(self, position: Position = None):
+        # Position définie à l'initialisation de la partie (aléatoire)
+        self.position = position  # sera fixée par initialiser_partie()
 
     def __repr__(self):
         return f"Hopital({self.position})"
@@ -263,7 +267,7 @@ class Grille:
 class EtatJeu:
     def __init__(self):
         self.grille = Grille()
-        self.hopital = Hopital()
+        self.hopital = Hopital()          # position=None, fixée par initialiser_partie()
         self.batiments: list = []
         self.survivants: list = []
         self.drones: list = []
