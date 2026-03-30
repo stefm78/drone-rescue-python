@@ -1,30 +1,52 @@
 # ROADMAP — drone-rescue-python
 
-> Fichier de reprise pour toute IA. Lire dans l’ordre : `README.md` → `prompt.md` → ce fichier.
+> Fichier de reprise pour toute IA. Lire dans l'ordre : `README.md` → `prompt.md` → ce fichier.
 
 ---
 
-## État final (30 mars 2026 — 10h00)
+## État au 30 mars 2026 — 18h00
 
-| Priorité | Tâche | Statut |
-|---|---|---|
-| P1 | Harmonisation convention `colonne:str` / `ligne:int` | ✅ |
-| P2 | 5 notebooks Jupyter (`notebooks/nb_01`…`nb_05`) | ✅ |
-| P3 | Enrichissement cours 01–08 (Erreurs classiques + QCM) | ✅ |
-| P4 | `corr_05` réécrit + `corr_06/07/08` vérifiés/corrigés | ✅ |
-| P5 | `GUIDE_FORMATEUR.md` | ✅ |
-| P6 | `argparse` dans `jeu/main.py` + `cours/09` aligné | ✅ |
+### ✅ Phases terminées
 
-**✅ Projet complet — aucune incohérence connue.**
+| Phase | Description | Statut |
+|-------|-------------|--------|
+| 1–7 | Refonte complète du code `jeu/` (dicts, sans POO, règles officielles) | ✅ |
+| 8A | `05_dictionnaires_avances.md` créé, `05_classes_et_objets.md` supprimé | ✅ |
+| 8B | `01`, `03`, `04` enrichis (list comprehension, try/except, json.load) | ✅ |
+| 8C | `06`, `07`, `08` réécrits (Chebyshev, règles officielles, boucle #65) | ✅ |
+| 8D | `annexe_formatage.md` + `09_assemblage_final.md` réécrits | ✅ |
+| 8E | `REFERENTIEL_ENSEIGNEMENTS.md` mis à jour (sans POO) | ✅ |
+| 8F | `prompt.md` réécrit | ✅ |
+| 9A | Exercices `ex_05` (dicts) à `ex_08` refondus, `ex_05_classes.py` supprimé | ✅ |
+| 9B | Corrections `corr_05` (dicts) à `corr_08` refondues, `corr_05_classes.py` supprimé | ✅ |
+| 9C-merge | Merge `refonte/dicts-regles-officiel` → `main` (commit `d747b0d`) | ✅ |
+| Audit | `AUDIT.md` créé sur `main` | ✅ |
+| 10 | `README.md` + `ROADMAP.md` mis à jour | ✅ |
+
+### 🟡 Phases restantes
+
+| Phase | Description | Priorité |
+|-------|-------------|----------|
+| 13 | Créer notebooks `nb_05_dicts_avances.ipynb`, `nb_06`, `nb_07`, `nb_08` | 🟡 |
+| 9C | Créer `ex_09_assemblage.py` + `corr_09_assemblage.py` | 🟡 |
+| — | Supprimer `notebooks/nb_05_classes.ipynb` (POO — obsolète) | 🟡 |
+| — | Mettre à jour `notebooks/nb_01` à `nb_04` (synchro cours refondus) | 🟢 |
+| — | Mettre à jour `GUIDE_FORMATEUR.md` | 🟢 |
 
 ---
 
 ## Conventions (immuables)
 
 ```python
-colonne: str   # 'A'..'L' — JAMAIS int 0-based dans cours/exercices/corrections/notebooks
-ligne:   int   # 1..12 (1-based)
-# Conversion interne : ord(colonne)-ord('A') → 0-based ; ligne-1 → 0-based
+# Coordonnées INTERNES (code jeu) :
+col: int   # 0-based (0 = colonne A)
+lig: int   # 0-based (0 = ligne 1)
+
+# Coordonnées AFFICHAGE (cours/exercices/corrections) :
+col_str: str  # 'A'..'J' — lettre
+lig_num: int  # 1-based
+# Ex: case B3 → col=1, lig=2 en interne
+# Conversion : col = LETTRES.index(lettre) ; lig = num - 1
 ```
 
 ### Styles attendus
@@ -33,22 +55,21 @@ ligne:   int   # 1..12 (1-based)
 
 **`.py` (exercices)** : en-tête `===` + convention ; sections `---` PARTIE A/B/C ; squelette `pass` ; `assert` + `print("AX OK")`
 
-**`.py` (corrections)** : même structure ; commentaires sur les CHOIX ; `assert` identiques à l’exercice
+**`.py` (corrections)** : même structure ; commentaires sur les CHOIX ; `assert` identiques à l'exercice
 
 **`.ipynb` (notebooks)** : Colab-compatible stdlib ; 8 cellules (titre→concepts→exemples→lien projet→exemple jeu→à toi→squelette→solution tag `solution`)
-
-**`jeu/main.py`** : `parse_args()` → `appliquer_args()` patche `config` AVANT `initialiser_partie()`
 
 ---
 
 ## Prompt de reprise IA
 
 ```
-Projet : drone-rescue-python (pédagogique Python débutant) — COMPLET.
+Projet : drone-rescue-python (pédagogique Python débutant).
 Lire : README.md → prompt.md → ROADMAP.md
-Convention : colonne str 'A'-'L', ligne int 1-based. Jamais int 0-based.
-Aucune tâche ouverte. Si extension demandée : voir GUIDE_FORMATEUR.md §4.
+Architecture : 100% dictionnaires, ZÉRO POO, règles officielles appliquées.
+Coord. internes : col/lig int 0-based. Affichage : lettre (A-J) + numéro 1-based.
+Phases 1-10 terminées. Restant : Phase 13 (notebooks nb_05 à nb_08).
 Règles : pas de placeholder, pas de troncature, chaque fichier prêt à être poussé.
 ```
 
-*MAJ : 30 mars 2026 09h55 CEST — P1✅ P2✅ P3✅ P4✅ P5✅ P6✅ — PROJET COMPLET*
+*MAJ : 30 mars 2026 18h00 CEST — Phases 1-10 ✅ — Phase 13 (notebooks) à venir*
