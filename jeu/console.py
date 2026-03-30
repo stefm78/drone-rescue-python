@@ -22,6 +22,7 @@ from logique import (
     valider_mouvement_tempete, executer_mouvement_tempete,
     deplacer_tempetes, propager_zones_x,
     appliquer_blocages, verifier_fin_partie,
+    appliquer_recharges_hopital,
     position_depuis_chaine, _pos_str
 )
 from config import MAX_DEPL_DRONE, MAX_DEPL_TEMPETE
@@ -34,24 +35,24 @@ def boucle_de_jeu(etat):
     Alterne les phases J1 et J2 jusqu'à la fin de partie.
     """
     while not etat["partie_finie"]:
-        # ── Phase J1 : Drones ──────────────────────────────────────────────
+        # ── Phase J1 : Drones ─────────────────────────────────────────────────────────────
         _phase_drones(etat)
         if etat["partie_finie"]:
             break
 
-        # ── Phase J2 : Tempêtes (manuelle) ────────────────────────────────
+        # ── Phase J2 : Tempêtes (manuelle) ────────────────────────────────────────────
         _phase_tempetes(etat)
         if etat["partie_finie"]:
             break
 
-        # ── Phase automatique : météo + propagation ───────────────────────
+        # ── Phase automatique : météo + propagation ─────────────────────────────────────
         logs_meteo = deplacer_tempetes(etat)
         logs_x = propager_zones_x(etat)
         for ligne in logs_meteo + logs_x:
             etat["historique"].append(ligne)
             enregistrer_log(ligne)
 
-        # ── Vérification fin de partie ────────────────────────────────────
+        # ── Vérification fin de partie ────────────────────────────────────────────────
         if verifier_fin_partie(etat):
             break
 
@@ -65,10 +66,17 @@ def _phase_drones(etat):
     """
     Phase J1 : le joueur déplace jusqu'à MAX_DEPL_DRONE drones.
     Chaque drone ne peut être déplacé qu'une seule fois par tour.
+    Les drones déjà présents sur l'hôpital sont rechargés en début de phase.
     """
     depl_effectues = 0
     drones_deplaces = set()
     drones_recharges = set()
+
+    # Recharge automatique des drones stationnaires sur l'hôpital
+    logs_recharge = appliquer_recharges_hopital(etat, drones_recharges)
+    for ligne in logs_recharge:
+        etat["historique"].append(ligne)
+        enregistrer_log(ligne)
 
     while depl_effectues < MAX_DEPL_DRONE:
         render_complet(etat, phase="P1-DRONES",
