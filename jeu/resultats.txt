@@ -1,0 +1,10 @@
+=== DRONE RESCUE — Résultats ===
+Issue         : VICTOIRE
+Score final   : 4 pt(s)
+Tours joués   : 14
+Survivants    : 4/4 sauvés
+
+Détail drones :
+  D1 : batterie 20/20 — actif
+  D2 : batterie 14/20 — actif
+  D3 : batterie 20/20 — actif
