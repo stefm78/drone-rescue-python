@@ -1,188 +1,174 @@
 # =============================================================================
 # CORRECTION 08 — Console et log
-# Module correspondant : cours/08_console_et_log.md
+# =============================================================================
+# Pas de classes, pas de régex. Logger = fonctions + dict.
 # =============================================================================
 
-import re
-import os
+
+LETTRES = list("ABCDEFGHIJKL")
 
 
 # -----------------------------------------------------------------------------
-# CORRECTION 1 — Parser une commande joueur
-# -----------------------------------------------------------------------------
-# On normalise la saisie (strip + upper) puis on teste dans l'ordre :
-# QUIT, NEXT, OK (mots-clés fixes), DRONE (D1-D6), TEMPETE (T1-T4),
-# CIBLE (A-L + 1-12), et INCONNU comme cas par défaut.
-# On utilise re.fullmatch pour s'assurer que la saisie correspond exactement.
+# EXERCICE 1 — Parser une commande joueur (sans re)
 # -----------------------------------------------------------------------------
 
 def parser_commande(saisie):
     """
-    Parse la saisie joueur et retourne (type_commande, valeur).
-    Insensible à la casse.
+    Parse sans régex. Retourne (type_commande, valeur).
     """
     s = saisie.strip().upper()
 
-    if s == "QUIT":
-        return ("QUIT", None)
-    if s == "NEXT":
-        return ("NEXT", None)
-    if s == "OK":
-        return ("OK", None)
+    # Mots-clés fixes d'abord
+    if s == "QUIT":  return ("QUIT",    None)
+    if s == "NEXT":  return ("NEXT",    None)
+    if s == "OK":    return ("OK",      None)
 
-    # Drone : D suivi d'un chiffre 1-6
-    if re.fullmatch(r'D[1-6]', s):
+    # Drone : D + chiffre 1-6
+    if len(s) == 2 and s[0] == "D" and s[1] in "123456":
         return ("DRONE", s)
 
-    # Tempête : T suivi d'un chiffre 1-4
-    if re.fullmatch(r'T[1-4]', s):
+    # Tempête : T + chiffre 1-4
+    if len(s) == 2 and s[0] == "T" and s[1] in "1234":
         return ("TEMPETE", s)
 
-    # Cible : lettre A-L suivie d'un nombre 1-12
-    m = re.fullmatch(r'([A-L])(1[0-2]|[1-9])', s)
-    if m:
-        return ("CIBLE", s)
+    # Cible : lettre A-L + entier 1-12
+    if len(s) >= 2 and s[0] in LETTRES:
+        try:
+            lig_jeu = int(s[1:])          # ex : "6" -> 6, "12" -> 12
+            if 1 <= lig_jeu <= 12:
+                col = LETTRES.index(s[0]) # "A"->0, "B"->1, ...
+                lig = lig_jeu - 1         # passage en 0-basé
+                return ("CIBLE", (col, lig))
+        except ValueError:
+            pass   # s[1:] n'est pas un entier -> INCONNU
 
     return ("INCONNU", s)
 
 
-# Tests
 if __name__ == "__main__":
-    print(parser_commande("D3"))    # ('DRONE', 'D3')
-    print(parser_commande("d3"))    # ('DRONE', 'D3')
-    print(parser_commande("T2"))    # ('TEMPETE', 'T2')
-    print(parser_commande("E6"))    # ('CIBLE', 'E6')
-    print(parser_commande("A12"))   # ('CIBLE', 'A12')
-    print(parser_commande("ok"))    # ('OK', None)
-    print(parser_commande("next"))  # ('NEXT', None)
-    print(parser_commande("quit"))  # ('QUIT', None)
-    print(parser_commande("xyz"))   # ('INCONNU', 'XYZ')
+    assert parser_commande("D3")   == ("DRONE",   "D3")
+    assert parser_commande("d3")   == ("DRONE",   "D3")
+    assert parser_commande("T2")   == ("TEMPETE", "T2")
+    assert parser_commande("E6")   == ("CIBLE",   (4, 5))
+    assert parser_commande("A12")  == ("CIBLE",   (0, 11))
+    assert parser_commande("ok")   == ("OK",    None)
+    assert parser_commande("next") == ("NEXT",  None)
+    assert parser_commande("quit") == ("QUIT",  None)
+    assert parser_commande("xyz")[0]  == "INCONNU"
+    assert parser_commande("Z9")[0]   == "INCONNU"   # Z hors A-L
+    print("Ex1 OK")
 
 
 # -----------------------------------------------------------------------------
-# CORRECTION 2 — Formater une ligne de log
-# -----------------------------------------------------------------------------
-# Le format attendu :
-#   T[nn] P[n] [D|T]  [ID] [départ]→[arrivée]  bat:[x→y]  surv:[id|—]  [ÉVÈNEMENT]
-# Les tempêtes n'affichent pas la batterie ni le survivant.
-# Pour les drones bloqués, bat affiche "—" (bat_avant ou bat_apres peut être None).
+# EXERCICE 2 — Formater une ligne de log
 # -----------------------------------------------------------------------------
 
 def formater_log(tour, phase, type_entite, id_entite,
-                 depart, arrivee, bat_avant=None, bat_apres=None,
+                 col_dep, lig_dep, col_arr, lig_arr,
+                 bat_avant=None, bat_apres=None,
                  survivant=None, evenement=""):
-    """
-    Retourne une ligne de log au format standard Drone Rescue.
-    """
-    # Numéro de tour sur 2 chiffres
-    t_str = f"T{str(tour).zfill(2)}"
-    p_str = f"P{phase}"
-    dep_str = f"{depart}→{arrivee}"
-
-    base = f"{t_str} {p_str} {type_entite}  {id_entite} {dep_str}"
+    """Retourne une ligne de log au format standard Drone Rescue."""
+    t_str  = f"T{tour:02d} P{phase} {type_entite}  {id_entite}"
+    dep    = f"({col_dep},{lig_dep})"
+    arr    = f"({col_arr},{lig_arr})"
+    mouv   = f"{dep}→{arr}"
 
     if type_entite == "T":
-        # Les tempêtes n'ont ni batterie ni survivant dans le log
-        ligne = base
-    else:
-        # Batterie
-        if bat_avant is not None and bat_apres is not None:
-            bat_str = f"bat:{bat_avant}→{bat_apres}"
-        else:
-            bat_str = "bat:—"
+        # Les tempêtes n'ont pas de section batterie ni survivant
+        return f"{t_str} {mouv}"
 
-        # Survivant
-        surv_str = f"surv:{survivant}" if survivant else "surv:—"
-
-        ligne = f"{base}    {bat_str}    {surv_str}"
-
+    bat_str  = f"bat:{bat_avant}→{bat_apres}" if bat_avant is not None else ""
+    surv_str = f"surv:{survivant}" if survivant else "surv:—"
+    parts    = [t_str, mouv]
+    if bat_str:
+        parts.append(bat_str.ljust(10))
+    parts.append(surv_str)
     if evenement:
-        ligne = f"{ligne}  {evenement}"
+        parts.append(evenement)
+    return "  ".join(parts)
 
-    return ligne
 
-
-# Tests
 if __name__ == "__main__":
-    print(formater_log(4, 1, "D", "D3", "B7", "E6", 6, 5))
-    # T04 P1 D  D3 B7→E6    bat:6→5    surv:—
-    print(formater_log(5, 1, "D", "D4", "E7", "A12", 5, 4, survivant="S3", evenement="LIVRAISON +1pt"))
-    # T05 P1 D  D4 E7→A12   bat:5→4    surv:S3  LIVRAISON +1pt
-    print(formater_log(4, 1, "T", "T1", "J2", "K2"))
-    # T04 P1 T  T1 J2→K2
+    ligne1 = formater_log(4, 1, "D", "D3", 1, 6, 4, 5, 6, 5)
+    print(ligne1)
+    ligne2 = formater_log(5, 1, "D", "D4", 4, 6, 0, 11, 5, 4,
+                          survivant="S3", evenement="LIVRAISON +1pt")
+    print(ligne2)
+    ligne3 = formater_log(4, 1, "T", "T1", 9, 1, 10, 2)
+    print(ligne3)
+    print("Ex2 OK")
 
 
 # -----------------------------------------------------------------------------
-# CORRECTION 3 — Classe Logger
-# -----------------------------------------------------------------------------
-# On ouvre le fichier en mode 'w' dès l'initialisation (crée ou écrase).
-# log() écrit simultanément en mémoire (liste) et dans le fichier (flush immédiat).
-# get_historique(n) retourne les n derniers éléments avec une slice.
-# fermer() appelle f.close() pour libérer les ressources.
+# EXERCICE 3 — Logger : fonctions + dict
 # -----------------------------------------------------------------------------
 
-class Logger:
-    def __init__(self, nom_fichier="partie.log"):
-        self.historique = []
-        self.fichier = open(nom_fichier, 'w', encoding='utf-8')
-
-    def log(self, message):
-        """Enregistre le message en mémoire et dans le fichier."""
-        self.historique.append(message)
-        self.fichier.write(message + "\n")
-        self.fichier.flush()  # écriture immédiate sur disque
-
-    def get_historique(self, n=10):
-        """Retourne les n dernières lignes de l'historique."""
-        return self.historique[-n:]
-
-    def fermer(self):
-        """Ferme proprement le fichier de log."""
-        self.fichier.close()
+def demarrer_log(nom_fichier="partie.log"):
+    """Crée le dict logger et ouvre le fichier en mode append."""
+    return {
+        "historique"  : [],
+        "nom_fichier" : nom_fichier,
+        # On ouvre en 'a' pour ne pas écraser un log précédent
+        "fichier"     : open(nom_fichier, "a", encoding="utf-8"),
+    }
 
 
-# Tests
+def enregistrer_log(logger, message):
+    """Ajoute le message à l'historique et écrit dans le fichier."""
+    logger["historique"].append(message)
+    logger["fichier"].write(message + "\n")
+    logger["fichier"].flush()  # force l'écriture immédiate sur disque
+
+
+def get_historique(logger, n=10):
+    """Retourne les n dernières lignes de l'historique."""
+    return logger["historique"][-n:]  # slicing : [-10:] sur une liste
+
+
+def fermer_log(logger):
+    """Ferme proprement le fichier."""
+    logger["fichier"].close()
+
+
 if __name__ == "__main__":
-    logger = Logger("test_partie.log")
-    logger.log("T01 P1 D  D1 A1→B2  bat:10→9  surv:—")
-    logger.log("T02 P1 D  D2 C3→D4  bat:8→7   surv:S1  COLLECTE")
-    print(logger.get_historique())    # les 2 lignes
-    print(logger.get_historique(1))   # dernière ligne seulement
-    logger.fermer()
-    print(os.path.exists("test_partie.log"))  # True
-    with open("test_partie.log", encoding='utf-8') as f:
+    import os
+    log = demarrer_log("test_partie.log")
+    enregistrer_log(log, "T01 P1 D  D1 (0,0)→(1,1)  bat:10→9  surv:—")
+    enregistrer_log(log, "T02 P1 D  D2 (2,2)→(3,3)  bat:8→7   surv:S1  COLLECTE")
+    assert len(get_historique(log)) == 2
+    assert get_historique(log, 1)[0].startswith("T02")
+    fermer_log(log)
+    assert os.path.exists("test_partie.log")
+    with open("test_partie.log", encoding="utf-8") as f:
         contenu = f.read()
-    print(contenu)
-    os.remove("test_partie.log")  # nettoyage
+    assert "T01" in contenu and "T02" in contenu
+    os.remove("test_partie.log")
+    print("Ex3 OK")
 
 
 # -----------------------------------------------------------------------------
-# CORRECTION 4 — Boucle de saisie (simulation)
-# -----------------------------------------------------------------------------
-# On itère sur la liste de commandes, on parse chaque entrée.
-# On ajoute le tuple au résultat, et on s'arrête dès NEXT ou QUIT.
-# Les commandes INCONNU sont ajoutées mais ne stoppent pas la boucle.
+# EXERCICE 4 — Boucle de saisie simulée
 # -----------------------------------------------------------------------------
 
 def simuler_saisie(commandes_joueur):
     """
-    Simule la boucle de saisie avec des commandes pré-définies.
-    Retourne la liste des tuples (type_cmd, valeur) traités jusqu'à NEXT/QUIT.
+    Simule la boucle de saisie.
+    S'arrête à NEXT ou QUIT (inclus dans le résultat).
     """
-    traitees = []
+    traites = []
     for saisie in commandes_joueur:
         cmd = parser_commande(saisie)
-        traitees.append(cmd)
+        traites.append(cmd)
         if cmd[0] in ("NEXT", "QUIT"):
-            break  # fin de tour ou sortie du jeu
-    return traitees
+            break   # fin de tour ou quitter
+    return traites
 
 
-# Tests
 if __name__ == "__main__":
     cmds = ["D3", "E6", "ok", "D1", "B2", "ok", "next"]
     resultat = simuler_saisie(cmds)
+    assert resultat[-1] == ("NEXT", None)
+    assert len(resultat) == 7
     for cmd in resultat:
         print(cmd)
-    # ('DRONE', 'D3'), ('CIBLE', 'E6'), ('OK', None),
-    # ('DRONE', 'D1'), ('CIBLE', 'B2'), ('OK', None), ('NEXT', None)
+    print("Ex4 OK")
