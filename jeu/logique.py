@@ -5,15 +5,20 @@
 #   initialiser_partie()        -> EtatJeu
 #   valider_mouvement()         -> (bool, str)
 #   executer_mouvement()        -> str
-#   propager_tempetes()         -> list[str]
+#   propager_zones_x()          -> list[str]   (≠ tempêtes !)
+#   deplacer_tempetes()         -> list[str]   (auto, IA)
 #   appliquer_blocages()        -> None
 #   verifier_fin_partie()       -> bool
 #   recharger_drone()           -> str
 #
-# RÈGLES STRICTES (mises à jour) :
-#   - Tour Drone  : 3 déplacements max, 1 case max/drone, chaque drone 1 fois max par tour
-#   - Tour Tempête: 2 déplacements manuel max, 1 case max/tempête, chaque tempête 1 fois max
-#   - Recharge hôpital : 1 seule fois par tour par drone (même si le drone reste dessus)
+# RÈGLES STRICTES :
+#   - Tour Drone  : 3 déplacements max, 1 case/drone, chaque drone 1 fois max
+#   - Tour Tempête: 2 déplacements manuels max, 1 case/tempête, chaque tempête 1 fois max
+#   - Recharge hôpital : 1 seule fois par tour par drone
+#   - Hôpital : aucun bâtiment ne peut être adjacent (8 cases)
+#   - Propagation : les ZONES X se propagent depuis les zones X existantes
+#     Les TEMPÊTES ne se propagent PAS — elles se déplacent d'elles-mêmes
+#   - Déplacement auto des tempêtes (fin de tour) selon direction aléatoire
 # =============================================================================
 
 import random
@@ -37,12 +42,9 @@ def initialiser_partie() -> EtatJeu:
     """
     Crée et retourne un EtatJeu initialisé :
     - Grille vide
-    - Hôpital placé en A12
-    - Bâtiments placés aléatoirement
-    - Drones placés aléatoirement
-    - Tempêtes placées aléatoirement
-    - Survivants placés aléatoirement
-    - Zones X placées aléatoirement
+    - Hôpital placé en A12 (position fixe depuis config)
+    - Bâtiments placés aléatoirement — JAMAIS adjacents à l'hôpital (8 cases)
+    - Drones, Tempêtes, Survivants, Zones X aléatoires
     """
     etat = EtatJeu()
     occupees: set = set()
@@ -51,8 +53,11 @@ def initialiser_partie() -> EtatJeu:
     etat.grille.definir(pos_hopital, 'H')
     occupees.add(pos_hopital)
 
+    # Bloquer les 8 cases adjacentes à l'hôpital pour les bâtiments
+    cases_autour_hopital: set = set(pos_hopital.voisins_diag())
+
     for i in range(NB_BATIMENTS):
-        pos = _position_aleatoire(occupees)
+        pos = _position_aleatoire(occupees, interdites=cases_autour_hopital)
         if pos is None:
             break
         bat = Batiment(pos)
@@ -98,13 +103,18 @@ def initialiser_partie() -> EtatJeu:
     return etat
 
 
-def _position_aleatoire(occupees: set, max_tentatives: int = 200) -> 'Position | None':
-    """Retourne une position aléatoire libre dans la grille."""
+def _position_aleatoire(occupees: set, interdites: set = None,
+                        max_tentatives: int = 200) -> 'Position | None':
+    """
+    Retourne une position aléatoire libre dans la grille,
+    en évitant `occupees` ET `interdites`.
+    """
+    interdit = (interdites or set()) | occupees
     for _ in range(max_tentatives):
         col = random.randint(0, GRILLE_TAILLE - 1)
         lig = random.randint(0, GRILLE_TAILLE - 1)
         pos = Position(col, lig)
-        if pos not in occupees:
+        if pos not in interdit:
             return pos
     return None
 
@@ -116,15 +126,7 @@ def _position_aleatoire(occupees: set, max_tentatives: int = 200) -> 'Position |
 def valider_mouvement(etat: EtatJeu, drone: Drone, cible: Position) -> tuple:
     """
     Vérifie si le drone peut se déplacer vers la cible.
-
     Retourne (True, "") si valide, (False, raison) sinon.
-
-    Règles :
-      - Drone actif (pas HS, pas bloqué)
-      - Cible dans la grille
-      - Distance Chebyshev == 1 (une case exactement)
-      - La cible n'est pas un bâtiment
-      - Batterie > 0
     """
     if drone.hors_service:
         return False, f"{drone.identifiant} est hors service (batterie à 0)"
@@ -143,13 +145,7 @@ def valider_mouvement(etat: EtatJeu, drone: Drone, cible: Position) -> tuple:
 
 def valider_mouvement_tempete(etat: EtatJeu, tempete: Tempete, cible: Position) -> tuple:
     """
-    Vérifie si la tempête peut se déplacer vers la cible.
-
-    Règles :
-      - Cible dans la grille
-      - Distance Chebyshev == 1
-      - La cible n'est pas l'hôpital
-      - La cible n'est pas un bâtiment
+    Vérifie si la tempête peut se déplacer vers la cible (déplacement manuel P2).
     """
     if not cible.est_valide():
         return False, f"Position {cible} hors de la grille"
@@ -168,22 +164,8 @@ def valider_mouvement_tempete(etat: EtatJeu, tempete: Tempete, cible: Position) 
 
 def executer_mouvement(etat: EtatJeu, drone: Drone, cible: Position,
                        drones_recharges_ce_tour: set) -> str:
-    """
-    Déplace le drone vers cible (valider_mouvement doit avoir été appelé).
-    drones_recharges_ce_tour : set d'identifiants de drones déjà rechargés ce tour.
-
-    Gère :
-      - Mise à jour position + grille
-      - Consommation batterie
-      - Blocage si tempête sur la cible
-      - Récupération automatique d'un survivant
-      - Livraison + recharge à l'hôpital (1 fois/tour/drone)
-
-    Retourne la ligne de log condensée.
-    """
     depart = Position(drone.position.col, drone.position.lig)
 
-    # --- Blocage tempête sur la cible ---
     tempete_sur_cible = etat.tempete_sur_case(cible)
     if tempete_sur_cible:
         drone.bloque = 2
@@ -193,7 +175,6 @@ def executer_mouvement(etat: EtatJeu, drone: Drone, cible: Position,
         return _format_log_condense(etat, drone.identifiant, depart, cible,
                                     drone.batterie, drone.batterie, evt)
 
-    # --- Déplacement normal ---
     bat_avant = drone.batterie
     drone.position = cible
     drone.consommer_batterie(1)
@@ -202,16 +183,13 @@ def executer_mouvement(etat: EtatJeu, drone: Drone, cible: Position,
     evenement = ""
     surv_id = drone.survivant.identifiant if drone.survivant else None
 
-    # --- Hôpital ---
     if cible == etat.hopital.position:
-        # Livraison si porte un survivant
         if drone.survivant:
             s = drone.deposer_survivant_hopital()
             if s:
                 etat.score += 1
                 evenement = f"LIVRAISON {s.identifiant} +1pt"
                 surv_id = None
-        # Recharge : 1 seule fois par tour par drone
         if drone.identifiant not in drones_recharges_ce_tour:
             drone.recharger()
             bat_apres = drone.batterie
@@ -219,7 +197,6 @@ def executer_mouvement(etat: EtatJeu, drone: Drone, cible: Position,
             if not evenement:
                 evenement = "RECHARGE"
     else:
-        # --- Récupération d'un survivant ---
         if drone.survivant is None:
             s = etat.survivant_sur_case(cible)
             if s:
@@ -238,26 +215,32 @@ def executer_mouvement(etat: EtatJeu, drone: Drone, cible: Position,
 
 
 def executer_mouvement_tempete(etat: EtatJeu, tempete: Tempete, cible: Position) -> str:
-    """
-    Déplace la tempête vers cible (valider_mouvement_tempete doit avoir été appelé).
-    Applique les blocages de drones si nécessaire.
-    Retourne la ligne de log condensée.
-    """
     depart = Position(tempete.position.col, tempete.position.lig)
     tempete.position = cible
+    # Mémoriser la direction choisie manuellement
+    tempete.direction = (
+        cible.col - depart.col,
+        cible.lig - depart.lig
+    )
     appliquer_blocages(etat)
     _mettre_a_jour_grille(etat)
     return _format_log_condense(etat, tempete.identifiant, depart, cible)
 
 
 # ---------------------------------------------------------------------------
-# Propagation des tempêtes (automatique, fin de tour)
+# Propagation des ZONES X (fin de tour, périodique)
+# Les TEMPÊTES NE SE PROPAGENT PAS.
+# Ce sont les zones X existantes qui s'étendent vers leurs voisins ortho.
 # ---------------------------------------------------------------------------
 
-def propager_tempetes(etat: EtatJeu) -> list:
+def propager_zones_x(etat: EtatJeu) -> list:
     """
-    Tous les PROPAGATION_FREQUENCE tours, crée de nouvelles zones X.
-    Retourne la liste des lignes de log condensées.
+    Tous les PROPAGATION_FREQUENCE tours, les zones X s'étendent.
+    Source : chaque zone X existante (pas les tempêtes).
+    Cibles : cases orthogonalement adjacentes à une zone X.
+    Exclues : bâtiments, hôpital, zones X déjà existantes.
+    Probabilité par case : PROBA_PROPAGATION.
+    Retourne la liste des lignes de log.
     """
     logs = []
     if etat.tour % PROPAGATION_FREQUENCE != 0:
@@ -266,13 +249,11 @@ def propager_tempetes(etat: EtatJeu) -> list:
     nouvelles_zones = set()
     hopital_pos = etat.hopital.position
 
-    for tempete in etat.tempetes:
-        for voisin in tempete.position.voisins_ortho():
+    for zone_x in list(etat.zones_x):
+        for voisin in zone_x.voisins_ortho():
             if etat.batiment_sur_case(voisin):
                 continue
             if voisin == hopital_pos:
-                continue
-            if etat.survivant_sur_case(voisin):
                 continue
             if voisin in etat.zones_x:
                 continue
@@ -280,9 +261,7 @@ def propager_tempetes(etat: EtatJeu) -> list:
                 continue
             if random.random() < PROBA_PROPAGATION:
                 nouvelles_zones.add(voisin)
-                logs.append(
-                    f"T{etat.tour:02d}  {tempete.identifiant}  PROPAGATION→{voisin}"
-                )
+                logs.append(f"T{etat.tour:02d}  X   PROPAGATION→{voisin}")
 
     for pos in nouvelles_zones:
         etat.zones_x.add(pos)
@@ -292,24 +271,57 @@ def propager_tempetes(etat: EtatJeu) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Déplacement automatique des tempêtes (IA fin de tour)
+# Déplacement automatique des tempêtes (IA — fin de tour)
+# Appelé dans boucle_saisie() après la phase P2 manuelle.
 # ---------------------------------------------------------------------------
 
 def deplacer_tempetes(etat: EtatJeu) -> list:
     """
-    Chaque tempête se déplace aléatoirement de 1 case (automatique).
-    Retourne la liste des lignes de log condensées.
+    Chaque tempête se déplace automatiquement de 1 case selon sa direction courante.
+    Règles :
+      - La tempête suit tempete.direction (dx, dy) initialisée aléatoirement
+      - Si la case suivante est invalide / bâtiment / hôpital :
+          rebond : nouvelle direction valide aléatoire parmi les 8 voisins
+      - Si aucune direction libre : la tempête reste sur place
+    Retourne la liste des lignes de log.
     """
     logs = []
     hopital_pos = etat.hopital.position
 
+    def _cible_libre(pos):
+        return (
+            pos.est_valide()
+            and not etat.batiment_sur_case(pos)
+            and pos != hopital_pos
+        )
+
     for tempete in etat.tempetes:
         depart = Position(tempete.position.col, tempete.position.lig)
-        voisins = [v for v in tempete.position.voisins_diag() if v != hopital_pos]
-        if voisins:
-            tempete.position = random.choice(voisins)
+        dx, dy = tempete.direction
+        cible = Position(tempete.position.col + dx, tempete.position.lig + dy)
+
+        if not _cible_libre(cible):
+            voisins_libres = [
+                v for v in tempete.position.voisins_diag()
+                if _cible_libre(v)
+            ]
+            if voisins_libres:
+                cible = random.choice(voisins_libres)
+                tempete.direction = (
+                    cible.col - tempete.position.col,
+                    cible.lig - tempete.position.lig
+                )
+            else:
+                logs.append(
+                    _format_log_condense(etat, tempete.identifiant, depart, depart)
+                )
+                continue
+        else:
+            tempete.direction = (dx, dy)
+
+        tempete.position = cible
         logs.append(
-            _format_log_condense(etat, tempete.identifiant, depart, tempete.position)
+            _format_log_condense(etat, tempete.identifiant, depart, cible)
         )
 
     appliquer_blocages(etat)
@@ -338,11 +350,6 @@ def appliquer_blocages(etat: EtatJeu):
 # ---------------------------------------------------------------------------
 
 def verifier_fin_partie(etat: EtatJeu) -> bool:
-    """
-    Retourne True et met à jour etat si la partie est terminée.
-    Victoire : tous les survivants sauvés.
-    Défaite : tours épuisés OU plus de drones actifs.
-    """
     if all(s.est_sauve() for s in etat.survivants):
         etat.partie_finie = True
         etat.victoire = True
@@ -396,18 +403,13 @@ def _mettre_a_jour_grille(etat: EtatJeu):
 
 
 # ---------------------------------------------------------------------------
-# Utilitaire : log condensé (1 ligne, mouvements validés uniquement)
+# Utilitaire : log condensé (1 ligne)
 # ---------------------------------------------------------------------------
 
 def _format_log_condense(etat: EtatJeu, identifiant: str,
                          depart: 'Position', arrivee: 'Position',
                          bat_avant: int = None, bat_apres: int = None,
                          evenement: str = "", surv_id: str = None) -> str:
-    """
-    Format condensé (1 seule ligne) :
-      T04  D3  B7→E6  bat:6→5  [surv:S3]  [EVENEMENT]
-    Les tempêtes n'ont pas de batterie ni de survivant.
-    """
     parts = [f"T{etat.tour:02d}", f"{identifiant:3s}", f"{depart}→{arrivee}"]
     if bat_avant is not None and bat_apres is not None:
         parts.append(f"bat:{bat_avant}→{bat_apres}")
