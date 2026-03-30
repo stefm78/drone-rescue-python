@@ -1,10 +1,10 @@
 # ROADMAP — drone-rescue-python
 
-> Fichier de reprise pour toute IA. Lire dans l'ordre : `README.md` → `prompt.md` → ce fichier.
+> Fichier de reprise pour toute IA. Lire dans l'ordre : `README.md` → `archive/prompt.md` → ce fichier.
 
 ---
 
-## État au 30 mars 2026 — 18h00
+## État au 30 mars 2026 — 19h00
 
 ### ✅ Phases terminées
 
@@ -12,26 +12,29 @@
 |-------|-------------|--------|
 | 1–7 | Refonte complète du code `jeu/` (dicts, sans POO, règles officielles) | ✅ |
 | 8A | `05_dictionnaires_avances.md` créé, `05_classes_et_objets.md` supprimé | ✅ |
-| 8B | `01`, `03`, `04` enrichis (list comprehension, try/except, json.load) | ✅ |
-| 8C | `06`, `07`, `08` réécrits (Chebyshev, règles officielles, boucle #65) | ✅ |
-| 8D | `annexe_formatage.md` + `09_assemblage_final.md` réécrits | ✅ |
-| 8E | `REFERENTIEL_ENSEIGNEMENTS.md` mis à jour (sans POO) | ✅ |
-| 8F | `prompt.md` réécrit | ✅ |
-| 9A | Exercices `ex_05` (dicts) à `ex_08` refondus, `ex_05_classes.py` supprimé | ✅ |
-| 9B | Corrections `corr_05` (dicts) à `corr_08` refondues, `corr_05_classes.py` supprimé | ✅ |
-| 9C-merge | Merge `refonte/dicts-regles-officiel` → `main` (commit `d747b0d`) | ✅ |
-| Audit | `AUDIT.md` créé sur `main` | ✅ |
-| 10 | `README.md` + `ROADMAP.md` mis à jour | ✅ |
+| 8B | `01`, `03`, `04` enrichis | ✅ |
+| 8C | `06`, `07`, `08` réécrits (Chebyshev, règles officielles) | ✅ |
+| 8D | `annexe_formatage.md` + `09_assemblage_final.md` | ✅ |
+| 8E | `REFERENTIEL_ENSEIGNEMENTS.md` mis à jour | ✅ |
+| 8F | `archive/prompt.md` archivé (PR #7) | ✅ |
+| 9A | Exercices `ex_05`→`ex_08` refondus | ✅ |
+| 9B | Corrections `corr_05`→`corr_08` refondues | ✅ |
+| 9C | `ex_09_assemblage.py` + `corr_09_assemblage.py` créés (PR #5) | ✅ |
+| 10 | `README.md` + `ROADMAP.md` réécrits | ✅ |
+| 13 | `nb_05` dicts, `nb_06` grille, `nb_07` logique, `nb_08` console | ✅ |
+| PR #6 | Fix log épinglé + synchro `nb_01`→`nb_04` 0-based | ✅ |
+| PR #7 | Fix batterie insuffisante + propagation 1 ligne + archive prompt | ✅ |
+| PR #8 | `propager_zones_x` 1 ligne stricte + `valider_mouvement` coût réel + `nb_09` + docs | ✅ |
 
-### 🟡 Phases restantes
+### 🟡 Tâches restantes (optionnelles)
 
-| Phase | Description | Priorité |
-|-------|-------------|----------|
-| 13 | Créer notebooks `nb_05_dicts_avances.ipynb`, `nb_06`, `nb_07`, `nb_08` | 🟡 |
-| 9C | Créer `ex_09_assemblage.py` + `corr_09_assemblage.py` | 🟡 |
-| — | Supprimer `notebooks/nb_05_classes.ipynb` (POO — obsolète) | 🟡 |
-| — | Mettre à jour `notebooks/nb_01` à `nb_04` (synchro cours refondus) | 🟢 |
-| — | Mettre à jour `GUIDE_FORMATEUR.md` | 🟢 |
+| Priorité | Action |
+|----------|--------|
+| 🟡 | Audit `console.py` (7,9 Ko) — cohérence log + batterie |
+| 🟡 | Vérifier `nb_05`→`nb_08` : convention 0-based |
+| 🟢 | `GUIDE_FORMATEUR.md` — mise à jour (sans POO) |
+| 🟢 | `tests/test_logique.py` — pytest basique |
+| 🟢 | `CHANGELOG.md` — historique versions |
 
 ---
 
@@ -65,11 +68,11 @@ lig_num: int  # 1-based
 
 ```
 Projet : drone-rescue-python (pédagogique Python débutant).
-Lire : README.md → prompt.md → ROADMAP.md
+Lire : README.md → archive/prompt.md → ROADMAP.md
 Architecture : 100% dictionnaires, ZÉRO POO, règles officielles appliquées.
 Coord. internes : col/lig int 0-based. Affichage : lettre (A-J) + numéro 1-based.
-Phases 1-10 terminées. Restant : Phase 13 (notebooks nb_05 à nb_08).
+Toutes les PRs (1→8) mergées. Restant (optionnel) : audit console.py, nb_05-08 0-based, GUIDE_FORMATEUR, tests, CHANGELOG.
 Règles : pas de placeholder, pas de troncature, chaque fichier prêt à être poussé.
 ```
 
-*MAJ : 30 mars 2026 18h00 CEST — Phases 1-10 ✅ — Phase 13 (notebooks) à venir*
+*MAJ : 30 mars 2026 19h00 CEST — PRs 1→8 terminées ✅ — Projet à ~95%*
