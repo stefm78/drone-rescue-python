@@ -11,7 +11,7 @@
 #     - Chaque tempête déplacée au plus 1 fois par tour
 #     - 1 seule case par déplacement
 #   Recharge hôpital : 1 seule fois par tour par drone
-#   Hôpital : aucun bâtiment adjacent
+#   Hôpital : aucun bâtiment adjacent, positionné aléatoirement
 #   Propagation : les ZONES X s'étendent (pas les tempêtes)
 #   Déplacement auto des tempêtes : en fin de tour (après P2)
 #
@@ -20,6 +20,8 @@
 #   - Les erreurs sont passées en paramètre à render_complet() via msg_erreur=
 #     -> elles s'affichent inline sur la ligne de prompt, en rouge
 #   - Le log n'est jamais pollué par des erreurs
+#   - 3 lignes vides SOUS la zone de commande pour éviter le scroll vers le haut
+#     en cas d'erreur
 # =============================================================================
 
 from modeles import EtatJeu, Drone, Tempete, Position
@@ -72,14 +74,22 @@ def parser_commande(texte: str) -> tuple:
 # Prompt inline — jamais de print() autonome
 # ---------------------------------------------------------------------------
 
+# Nombre de lignes vides conservées SOUS la zone de commande
+# pour éviter que le terminal scrolle vers le haut en cas d'erreur.
+_LIGNES_TAMPON = 3
+
+
 def _prompt(texte_prompt: str, msg_erreur: str = None) -> str:
     if msg_erreur:
         print(f"  \033[91m\u2717 {msg_erreur}\033[0m")
     print(f"  {texte_prompt}", end="", flush=True)
     try:
-        return input().strip()
+        saisie = input().strip()
     except (EOFError, KeyboardInterrupt):
-        return 'q'
+        saisie = 'q'
+    # Lignes tampon : maintiennent l'espace sous la zone de commande
+    print("\n" * _LIGNES_TAMPON, end="")
+    return saisie
 
 
 # ---------------------------------------------------------------------------
