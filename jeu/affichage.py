@@ -2,8 +2,6 @@
 # affichage.py — Rendu console de Drone Rescue
 #
 # Travaille exclusivement avec des dictionnaires (pas de classes).
-# Pas de codes ANSI couleur (supprimés pour simplifier).
-# Effacement d'écran conservé pour la lisibilité en jeu.
 # =============================================================================
 
 import os
@@ -23,7 +21,7 @@ def effacer_ecran():
 def render_titre_score(etat, phase='', depl_restants=-1):
     """
     Retourne la ligne de titre du jeu avec les informations clés.
-    Exemple : ✦ DRONE RESCUE  |  Score 3  |  Surv. 4  |  Zones X 2  |  Tour 4/20  |  [P1-DRONES 2/3]
+    Exemple : === DRONE RESCUE ===  Score:3  Surv.:4  ZonesX:2  Tour:4/20  [P1-DRONES 2/3]
     """
     nb_surv = sum(1 for s in etat["survivants"].values() if s["etat"] != "sauve")
     nb_zones = len(etat["zones_x"])
@@ -50,14 +48,7 @@ def render_titre_score(etat, phase='', depl_restants=-1):
 def render_grille(etat):
     """
     Retourne la grille sous forme de liste de lignes texte.
-    Exemple de case :
-      .  =  vide
-      D  =  drone
-      T  =  tempête
-      S  =  survivant en attente
-      H  =  hôpital
-      B  =  bâtiment
-      X  =  zone dangereuse
+    Légende : .=vide  D=drone  T=tempête  S=survivant  H=hôpital  B=bâtiment  X=zone dangereuse
     """
     taille = len(etat["grille"])
     lignes = []
@@ -87,7 +78,6 @@ def render_statuts(etat):
     """
     lignes = []
 
-    # En-tête drones
     lignes.append(f"{'ID':<4} {'Pos':<5} {'Bat':<9} {'Surv':<6} Blq")
     lignes.append("-" * 32)
 
@@ -101,7 +91,6 @@ def render_statuts(etat):
 
     lignes.append("")
 
-    # En-tête tempêtes
     lignes.append(f"{'ID':<4} {'Pos'}")
     lignes.append("-" * 14)
     for t in etat["tempetes"].values():
@@ -115,16 +104,29 @@ def render_statuts(etat):
 # Colonne 3 : Log condensé
 # ---------------------------------------------------------------------------
 
-def render_log_col(etat, nb_lignes=15):
-    """Retourne les dernières lignes du log (mouvements du tour)."""
-    lignes = ["--- LOG ---"]
+def render_log_col(etat, nb_lignes=20):
+    """
+    Retourne les dernières lignes du log.
+    Les lignes de propagation [X] sont toujours affichées en fin de liste
+    pour garantir leur visibilité même en cas de log long.
+    """
+    lignes_titre = ["--- LOG ---"]
     if not etat["historique"]:
-        lignes.append("  (aucun mouvement)")
-    else:
-        extrait = etat["historique"][-(nb_lignes - 1):]
-        for entree in extrait:
-            lignes.append("  " + entree)
-    return lignes
+        return lignes_titre + ["  (aucun mouvement)"]
+
+    historique = etat["historique"]
+
+    # Séparer les lignes de propagation X du reste
+    lignes_x     = [l for l in historique if "[X]" in l]
+    lignes_autres = [l for l in historique if "[X]" not in l]
+
+    # Prendre les (nb_lignes - 1 - len(lignes_x)) dernières lignes normales
+    quota_autres = max(0, nb_lignes - 1 - len(lignes_x))
+    extrait = lignes_autres[-quota_autres:] if quota_autres > 0 else []
+
+    # Assembler : lignes normales d'abord, puis propagation X à la fin
+    toutes = extrait + lignes_x
+    return lignes_titre + ["  " + l for l in toutes]
 
 
 # ---------------------------------------------------------------------------
@@ -134,8 +136,8 @@ def render_log_col(etat, nb_lignes=15):
 def render_complet(etat, phase='', depl_restants=-1):
     """
     Efface le terminal et affiche en 3 zones côte à côte :
-      - Titre + score
-      - Grille | Statuts | Log
+      Titre + score
+      Grille | Statuts | Log
     """
     effacer_ecran()
 
@@ -146,7 +148,6 @@ def render_complet(etat, phase='', depl_restants=-1):
     col2 = render_statuts(etat)
     col3 = render_log_col(etat)
 
-    # Largeurs des colonnes
     taille = len(etat["grille"])
     col1_w = 6 + taille * 3 + 2
     col2_w = 36

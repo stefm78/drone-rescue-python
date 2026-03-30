@@ -217,8 +217,6 @@ def appliquer_recharges_hopital(etat, drones_recharges_ce_tour):
     """
     Recharge tous les drones dont la position courante est l'hôpital,
     en début de phase J1 (avant tout déplacement).
-    Permet à un drone qui stationne sur l'hôpital de se recharger
-    chaque tour, pas seulement lors du tour où il y arrive.
     Retourne la liste des lignes de log.
     """
     logs = []
@@ -251,11 +249,7 @@ def appliquer_recharges_hopital(etat, drones_recharges_ce_tour):
 
 def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     """
-    Déplace le drone vers cible, applique les règles officielles :
-    - Coût batterie : 1 (déplacement normal) ou COUT_TRANSPORT (si survivant embarqué)
-    - Entrée zone X : coût supplémentaire COUT_ZONE_X
-    - Collision tempête : blocage 2 tours
-    - Hôpital : livraison survivant + recharge +RECHARGE_HOPITAL
+    Déplace le drone vers cible, applique les règles officielles.
     Retourne une ligne de log.
     """
     did = drone["id"]
@@ -292,7 +286,7 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
             evenement = f"LIVRAISON {s['id']} +1pt"
             drone["survivant"] = None
             surv_id = None
-        # Recharge (seulement si pas déjà rechargé ce tour)
+        # Recharge
         if did not in drones_recharges_ce_tour:
             drone["batterie"] = min(
                 drone["batterie_max"],
@@ -334,14 +328,13 @@ def executer_mouvement_tempete(etat, tempete, cible):
 
 
 # ---------------------------------------------------------------------------
-# Phase météo : déplacement automatique des tempêtes (50 % de chance)
+# Phase météo : déplacement automatique des tempêtes
 # ---------------------------------------------------------------------------
 
 def deplacer_tempetes(etat):
     """
     Phase automatique en fin de tour.
     Chaque tempête a PROB_METEO % de chance de bouger.
-    Si elle bouge, elle suit sa direction courante (rebond si obstacle).
     Retourne la liste des lignes de log.
     """
     logs = []
@@ -351,7 +344,6 @@ def deplacer_tempetes(etat):
         tid = tempete["id"]
         depart = (tempete["col"], tempete["lig"])
 
-        # Tirage météo : 50 % de chance de bouger
         if random.random() > PROB_METEO:
             logs.append(_log(etat, tid, depart, depart, evenement="IMMOBILE"))
             continue
@@ -360,7 +352,6 @@ def deplacer_tempetes(etat):
                  tempete["lig"] + tempete["dy"])
 
         if not _case_libre_tempete(etat, cible, hopital):
-            # Rebond : choisir une direction libre aléatoire parmi les 8 voisins
             voisins = _voisins_diag(depart)
             libres = [v for v in voisins if _case_libre_tempete(etat, v, hopital)]
             if libres:
@@ -388,7 +379,7 @@ def propager_zones_x(etat):
     Tous les PROPAGATION_FREQUENCE tours, les zones X s'étendent.
     Chaque voisin orthogonal d'une zone X existante a PROBA_PROPAGATION
     de devenir une nouvelle zone X.
-    Retourne la liste des lignes de log.
+    Retourne la liste des lignes de log (préfixées [X] pour visibilité).
     """
     logs = []
     if etat["tour"] % PROPAGATION_FREQUENCE != 0:
@@ -410,10 +401,16 @@ def propager_zones_x(etat):
             if random.random() < PROBA_PROPAGATION:
                 nouvelles.add(voisin)
 
-    for pos in nouvelles:
-        etat["zones_x"].add(pos)
-        col, lig = pos
-        logs.append(f"T{etat['tour']:02d}  X   PROPAGATION→{_pos_str(pos)}")
+    if nouvelles:
+        # Ligne de résumé en tête (toujours visible dans le log)
+        logs.append(
+            f"T{etat['tour']:02d}  [X] PROPAGATION  +{len(nouvelles)} zone(s) dangereuse(s)"
+        )
+        for pos in sorted(nouvelles):
+            etat["zones_x"].add(pos)
+            logs.append(f"T{etat['tour']:02d}  [X]   +{_pos_str(pos)}")
+    else:
+        logs.append(f"T{etat['tour']:02d}  [X] PROPAGATION  aucune extension ce tour")
 
     _mettre_a_jour_grille(etat)
     return logs
@@ -464,23 +461,19 @@ def verifier_fin_partie(etat):
 # ---------------------------------------------------------------------------
 
 def _case_valide(pos):
-    """Retourne True si (col, lig) est dans les limites de la grille."""
     col, lig = pos
     return 0 <= col < GRILLE_TAILLE and 0 <= lig < GRILLE_TAILLE
 
 
 def _distance_chebyshev(c1, l1, c2, l2):
-    """Distance de Chebyshev entre deux cases (max des différences absolues)."""
     return max(abs(c2 - c1), abs(l2 - l1))
 
 
 def _batiment_sur_case(etat, pos):
-    """Retourne True si la case pos contient un bâtiment."""
     return pos in etat["batiments"]
 
 
 def _tempete_sur_case(etat, pos):
-    """Retourne l'id de la tempête sur la case, ou None."""
     for t in etat["tempetes"].values():
         if (t["col"], t["lig"]) == pos:
             return t["id"]
@@ -488,7 +481,6 @@ def _tempete_sur_case(etat, pos):
 
 
 def _survivant_sur_case(etat, pos):
-    """Retourne le dict du survivant en attente sur la case, ou None."""
     for s in etat["survivants"].values():
         if s["etat"] == "en_attente" and (s["col"], s["lig"]) == pos:
             return s
@@ -496,7 +488,6 @@ def _survivant_sur_case(etat, pos):
 
 
 def _case_libre_tempete(etat, pos, hopital):
-    """Case accessible à une tempête (valide, pas bâtiment, pas hôpital)."""
     return (
         _case_valide(pos)
         and not _batiment_sur_case(etat, pos)
@@ -505,7 +496,6 @@ def _case_libre_tempete(etat, pos, hopital):
 
 
 def _position_aleatoire(occupees, interdites=None, max_tentatives=200):
-    """Retourne un tuple (col, lig) libre, ou None si impossible."""
     interdit = (interdites or set()) | occupees
     for _ in range(max_tentatives):
         col = random.randint(0, GRILLE_TAILLE - 1)
@@ -517,13 +507,11 @@ def _position_aleatoire(occupees, interdites=None, max_tentatives=200):
 
 
 def _voisins_ortho(pos):
-    """Retourne les 4 voisins orthogonaux (N/S/E/O) d'une case."""
     col, lig = pos
     return [(col, lig - 1), (col, lig + 1), (col - 1, lig), (col + 1, lig)]
 
 
 def _voisins_diag(pos):
-    """Retourne les 8 voisins (orthogonaux + diagonaux) d'une case."""
     col, lig = pos
     return [
         (col + dc, lig + dl)
@@ -534,7 +522,6 @@ def _voisins_diag(pos):
 
 
 def _mettre_a_jour_grille(etat):
-    """Reconstruit la grille depuis l'état courant."""
     g = etat["grille"]
     for lig in range(GRILLE_TAILLE):
         for col in range(GRILLE_TAILLE):
@@ -556,7 +543,6 @@ def _mettre_a_jour_grille(etat):
 
 
 def _pos_str(pos):
-    """Convertit un tuple (col, lig) en notation lisible ex: B3."""
     col, lig = pos
     if 0 <= col < len(LETTRES):
         return f"{LETTRES[col]}{lig + 1}"
