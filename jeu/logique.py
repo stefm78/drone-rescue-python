@@ -1,418 +1,559 @@
 # =============================================================================
 # logique.py — Règles du jeu Drone Rescue
 #
-# Fonctions :
-#   initialiser_partie()        -> EtatJeu
-#   valider_mouvement()         -> (bool, str)
-#   executer_mouvement()        -> str
-#   propager_zones_x()          -> list[str]   (≠ tempêtes !)
-#   deplacer_tempetes()         -> list[str]   (auto, IA)
-#   appliquer_blocages()        -> None
-#   verifier_fin_partie()       -> bool
-#   recharger_drone()           -> str
+# Toutes les entités du jeu sont des DICTIONNAIRES Python.
+# Aucune classe n'est utilisée (conformément aux contraintes du sujet).
 #
-# RÈGLES STRICTES :
-#   - Tour Drone  : 3 déplacements max, 1 case/drone, chaque drone 1 fois max
-#   - Tour Tempête: 2 déplacements manuels max, 1 case/tempête, chaque tempête 1 fois max
-#   - Recharge hôpital : 1 seule fois par tour par drone
-#   - Hôpital : aucun bâtiment ne peut être adjacent (8 cases)
-#   - Hôpital : positionné ALÉATOIREMENT en début de partie
-#   - Propagation : les ZONES X se propagent depuis les zones X existantes
-#     Les TEMPÊTE ne se propagent PAS — elles se déplacent d'elles-mêmes
-#   - Déplacement auto des tempêtes (fin de tour) selon direction aléatoire
+# Structure d'un état de jeu (dict) :
+#   etat = {
+#       "tour"        : int,
+#       "score"       : int,
+#       "partie_finie": bool,
+#       "victoire"    : bool,
+#       "grille"      : list[list[str]],   # grille[lig][col]
+#       "hopital"     : (col, lig),
+#       "batiments"   : [(col, lig), ...],
+#       "drones"      : { "D1": {drone_dict}, ... },
+#       "tempetes"    : { "T1": {tempete_dict}, ... },
+#       "survivants"  : { "S1": {survivant_dict}, ... },
+#       "zones_x"     : {(col, lig), ...},
+#       "historique"  : [str, ...],
+#   }
+#
+# Structure d'un drone :
+#   { "id": str, "col": int, "lig": int,
+#     "batterie": int, "batterie_max": int,
+#     "survivant": str|None,   # id du survivant embarqué
+#     "bloque": int,           # tours restants de blocage
+#     "hors_service": bool }
+#
+# Structure d'une tempête :
+#   { "id": str, "col": int, "lig": int,
+#     "dx": int, "dy": int }   # direction courante
+#
+# Structure d'un survivant :
+#   { "id": str, "col": int, "lig": int,
+#     "etat": "en_attente"|"embarque"|"sauve" }
 # =============================================================================
 
 import random
-from modeles import (
-    EtatJeu, Position, Batiment, Hopital, Survivant, Drone, Tempete, Grille
-)
 from config import (
     GRILLE_TAILLE, NB_DRONES, NB_TEMPETES, NB_BATIMENTS, NB_SURVIVANTS,
     BATTERIE_MAX, BATTERIE_INIT, NB_ZONES_DANGER,
     MAX_DEPL_DRONE, MAX_DEPL_TEMPETE, NB_TOURS_MAX,
-    PROBA_PROPAGATION, PROPAGATION_FREQUENCE
+    PROBA_PROPAGATION, PROPAGATION_FREQUENCE,
+    COUT_TRANSPORT, COUT_ZONE_X, RECHARGE_HOPITAL,
+    PROB_METEO, LETTRES
 )
 
 
 # ---------------------------------------------------------------------------
-# Initialisation
+# Fonctions de création des entités
 # ---------------------------------------------------------------------------
 
-def initialiser_partie() -> EtatJeu:
+def creer_drone(identifiant, col, lig):
+    """Retourne un dictionnaire représentant un drone."""
+    return {
+        "id"          : identifiant,
+        "col"         : col,
+        "lig"         : lig,
+        "batterie"    : BATTERIE_INIT,
+        "batterie_max": BATTERIE_MAX,
+        "survivant"   : None,
+        "bloque"      : 0,
+        "hors_service": False,
+    }
+
+
+def creer_tempete(identifiant, col, lig):
+    """Retourne un dictionnaire représentant une tempête."""
+    dx = random.choice([-1, 0, 1])
+    dy = random.choice([-1, 0, 1])
+    if dx == 0 and dy == 0:
+        dx = 1
+    return {"id": identifiant, "col": col, "lig": lig, "dx": dx, "dy": dy}
+
+
+def creer_survivant(identifiant, col, lig):
+    """Retourne un dictionnaire représentant un survivant."""
+    return {"id": identifiant, "col": col, "lig": lig, "etat": "en_attente"}
+
+
+# ---------------------------------------------------------------------------
+# Initialisation de la partie
+# ---------------------------------------------------------------------------
+
+def initialiser_partie():
     """
-    Crée et retourne un EtatJeu initialisé :
-    - Grille vide
-    - Hôpital placé ALÉATOIREMENT sur la grille
-    - Bâtiments placés aléatoirement — JAMAIS adjacents à l'hôpital (8 cases)
-    - Drones, Tempêtes, Survivants, Zones X aléatoires
+    Crée et retourne un état de jeu complet (dictionnaire).
+    Placement aléatoire de toutes les entités.
+    L'hôpital est placé aléatoirement. Aucun bâtiment ne peut lui être adjacent.
     """
-    etat = EtatJeu()
-    occupees: set = set()
+    occupees = set()
 
-    # --- Hôpital : position aléatoire ---
-    pos_hopital = _position_aleatoire(occupees)
-    etat.hopital.position = pos_hopital
-    etat.grille.definir(pos_hopital, 'H')
-    occupees.add(pos_hopital)
+    # Grille vide
+    grille = [['.' for _ in range(GRILLE_TAILLE)] for _ in range(GRILLE_TAILLE)]
 
-    # Bloquer les 8 cases adjacentes à l'hôpital pour les bâtiments
-    cases_autour_hopital: set = set(pos_hopital.voisins_diag())
+    # Hôpital
+    hopital = _position_aleatoire(occupees)
+    occupees.add(hopital)
+    grille[hopital[1]][hopital[0]] = 'H'
 
-    for i in range(NB_BATIMENTS):
-        pos = _position_aleatoire(occupees, interdites=cases_autour_hopital)
+    # Cases interdites aux bâtiments (8 voisins de l'hôpital)
+    interdites_bat = set(_voisins_diag(hopital))
+
+    # Bâtiments
+    batiments = []
+    for _ in range(NB_BATIMENTS):
+        pos = _position_aleatoire(occupees, interdites=interdites_bat)
         if pos is None:
             break
-        bat = Batiment(pos)
-        etat.batiments.append(bat)
-        etat.grille.definir(pos, 'B')
+        batiments.append(pos)
         occupees.add(pos)
+        grille[pos[1]][pos[0]] = 'B'
 
+    # Drones
+    drones = {}
     for i in range(1, NB_DRONES + 1):
         pos = _position_aleatoire(occupees)
         if pos is None:
             break
-        drone = Drone(f"D{i}", pos)
-        etat.drones.append(drone)
-        etat.grille.definir(pos, 'D')
+        did = f"D{i}"
+        drones[did] = creer_drone(did, pos[0], pos[1])
         occupees.add(pos)
+        grille[pos[1]][pos[0]] = 'D'
 
+    # Tempêtes
+    tempetes = {}
     for i in range(1, NB_TEMPETES + 1):
         pos = _position_aleatoire(occupees)
         if pos is None:
             break
-        tempete = Tempete(f"T{i}", pos)
-        etat.tempetes.append(tempete)
-        etat.grille.definir(pos, 'T')
+        tid = f"T{i}"
+        tempetes[tid] = creer_tempete(tid, pos[0], pos[1])
         occupees.add(pos)
+        grille[pos[1]][pos[0]] = 'T'
 
+    # Survivants
+    survivants = {}
     for i in range(1, NB_SURVIVANTS + 1):
         pos = _position_aleatoire(occupees)
         if pos is None:
             break
-        surv = Survivant(f"S{i}", pos)
-        etat.survivants.append(surv)
-        etat.grille.definir(pos, 'S')
+        sid = f"S{i}"
+        survivants[sid] = creer_survivant(sid, pos[0], pos[1])
         occupees.add(pos)
+        grille[pos[1]][pos[0]] = 'S'
 
+    # Zones X (aucune sur l'hôpital ni les bâtiments — déjà dans occupees)
+    zones_x = set()
     for _ in range(NB_ZONES_DANGER):
         pos = _position_aleatoire(occupees)
         if pos is None:
             break
-        etat.zones_x.add(pos)
-        etat.grille.definir(pos, 'X')
+        zones_x.add(pos)
         occupees.add(pos)
+        grille[pos[1]][pos[0]] = 'X'
 
-    return etat
-
-
-def _position_aleatoire(occupees: set, interdites: set = None,
-                        max_tentatives: int = 200) -> 'Position | None':
-    """
-    Retourne une position aléatoire libre dans la grille,
-    en évitant `occupees` ET `interdites`.
-    """
-    interdit = (interdites or set()) | occupees
-    for _ in range(max_tentatives):
-        col = random.randint(0, GRILLE_TAILLE - 1)
-        lig = random.randint(0, GRILLE_TAILLE - 1)
-        pos = Position(col, lig)
-        if pos not in interdit:
-            return pos
-    return None
+    return {
+        "tour"        : 1,
+        "score"       : 0,
+        "partie_finie": False,
+        "victoire"    : False,
+        "grille"      : grille,
+        "hopital"     : hopital,
+        "batiments"   : batiments,
+        "drones"      : drones,
+        "tempetes"    : tempetes,
+        "survivants"  : survivants,
+        "zones_x"     : zones_x,
+        "historique"  : [],
+    }
 
 
 # ---------------------------------------------------------------------------
-# Validation d'un mouvement drone
+# Validation des mouvements
 # ---------------------------------------------------------------------------
 
-def valider_mouvement(etat: EtatJeu, drone: Drone, cible: Position) -> tuple:
+def valider_mouvement(etat, drone, cible):
     """
-    Vérifie si le drone peut se déplacer vers la cible.
-    Retourne (True, "") si valide, (False, raison) sinon.
+    Vérifie si le drone (dict) peut se déplacer vers cible (col, lig).
+    Retourne (True, "") ou (False, raison).
     """
-    if drone.hors_service:
-        return False, f"{drone.identifiant} est hors service (batterie à 0)"
-    if drone.est_bloque():
-        return False, f"{drone.identifiant} est bloqué ({drone.bloque} tour(s) restant(s))"
-    if not cible.est_valide():
-        return False, f"Position {cible} hors de la grille"
-    if drone.position.distance_chebyshev(cible) > 1:
-        return False, f"Max 1 case par déplacement"
-    if etat.batiment_sur_case(cible):
-        return False, f"Case {cible} bloquée par un bâtiment"
-    if drone.batterie <= 0:
-        return False, f"{drone.identifiant} n'a plus de batterie"
+    did = drone["id"]
+    if drone["hors_service"]:
+        return False, f"{did} est hors service"
+    if drone["bloque"] > 0:
+        return False, f"{did} est bloqué ({drone['bloque']} tour(s))"
+    if not _case_valide(cible):
+        return False, f"Position hors de la grille"
+    if _distance_chebyshev(drone["col"], drone["lig"], cible[0], cible[1]) > 1:
+        return False, "Max 1 case par déplacement"
+    if _batiment_sur_case(etat, cible):
+        return False, f"Case bloquée par un bâtiment"
+    if drone["batterie"] <= 0:
+        return False, f"{did} n'a plus de batterie"
     return True, ""
 
 
-def valider_mouvement_tempete(etat: EtatJeu, tempete: Tempete, cible: Position) -> tuple:
-    """
-    Vérifie si la tempête peut se déplacer vers la cible (déplacement manuel P2).
-    """
-    if not cible.est_valide():
-        return False, f"Position {cible} hors de la grille"
-    if tempete.position.distance_chebyshev(cible) > 1:
-        return False, f"Max 1 case par déplacement"
-    if cible == etat.hopital.position:
-        return False, f"La tempête ne peut pas occuper l'hôpital"
-    if etat.batiment_sur_case(cible):
-        return False, f"Case {cible} bloquée par un bâtiment"
+def valider_mouvement_tempete(etat, tempete, cible):
+    """Vérifie si la tempête (dict) peut se déplacer vers cible."""
+    if not _case_valide(cible):
+        return False, "Position hors de la grille"
+    if _distance_chebyshev(tempete["col"], tempete["lig"], cible[0], cible[1]) > 1:
+        return False, "Max 1 case par déplacement"
+    if cible == etat["hopital"]:
+        return False, "La tempête ne peut pas occuper l'hôpital"
+    if _batiment_sur_case(etat, cible):
+        return False, "Case bloquée par un bâtiment"
     return True, ""
 
 
 # ---------------------------------------------------------------------------
-# Exécution d'un mouvement drone
+# Exécution des mouvements
 # ---------------------------------------------------------------------------
 
-def executer_mouvement(etat: EtatJeu, drone: Drone, cible: Position,
-                       drones_recharges_ce_tour: set) -> str:
-    depart = Position(drone.position.col, drone.position.lig)
+def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
+    """
+    Déplace le drone vers cible, applique les règles officielles :
+    - Coût batterie : 1 (déplacement normal) ou COUT_TRANSPORT (si survivant embarqué)
+    - Entrée zone X : coût supplémentaire COUT_ZONE_X
+    - Collision tempête : blocage 2 tours
+    - Hôpital : livraison survivant + recharge +RECHARGE_HOPITAL
+    Retourne une ligne de log.
+    """
+    did = drone["id"]
+    depart = (drone["col"], drone["lig"])
+    bat_avant = drone["batterie"]
 
-    tempete_sur_cible = etat.tempete_sur_case(cible)
+    # Collision avec une tempête sur la cible ?
+    tempete_sur_cible = _tempete_sur_case(etat, cible)
     if tempete_sur_cible:
-        drone.bloque = 2
-        drone.position = cible
+        drone["bloque"] = 2
+        drone["col"], drone["lig"] = cible
         _mettre_a_jour_grille(etat)
-        evt = f"BLOQUÉ({tempete_sur_cible.identifiant})"
-        return _format_log_condense(etat, drone.identifiant, depart, cible,
-                                    drone.batterie, drone.batterie, evt)
+        return _log(etat, did, depart, cible, bat_avant, bat_avant,
+                    f"BLOQUE({tempete_sur_cible})")
 
-    bat_avant = drone.batterie
-    drone.position = cible
-    drone.consommer_batterie(1)
-    bat_apres = drone.batterie
+    # Coût de déplacement
+    cout = COUT_TRANSPORT if drone["survivant"] else 1
 
+    # Coût supplémentaire zone X
+    if cible in etat["zones_x"]:
+        cout += COUT_ZONE_X
+
+    drone["batterie"] = max(0, drone["batterie"] - cout)
+    drone["col"], drone["lig"] = cible
     evenement = ""
-    surv_id = drone.survivant.identifiant if drone.survivant else None
+    surv_id = drone["survivant"]
 
-    if cible == etat.hopital.position:
-        if drone.survivant:
-            s = drone.deposer_survivant_hopital()
-            if s:
-                etat.score += 1
-                evenement = f"LIVRAISON {s.identifiant} +1pt"
-                surv_id = None
-        if drone.identifiant not in drones_recharges_ce_tour:
-            drone.recharger()
-            bat_apres = drone.batterie
-            drones_recharges_ce_tour.add(drone.identifiant)
+    if cible == etat["hopital"]:
+        # Livraison survivant
+        if drone["survivant"]:
+            s = etat["survivants"][drone["survivant"]]
+            s["etat"] = "sauve"
+            etat["score"] += 1
+            evenement = f"LIVRAISON {s['id']} +1pt"
+            drone["survivant"] = None
+            surv_id = None
+        # Recharge
+        if did not in drones_recharges_ce_tour:
+            drone["batterie"] = min(
+                drone["batterie_max"],
+                drone["batterie"] + RECHARGE_HOPITAL
+            )
+            drones_recharges_ce_tour.add(did)
             if not evenement:
-                evenement = "RECHARGE"
+                evenement = f"RECHARGE +{RECHARGE_HOPITAL}"
     else:
-        if drone.survivant is None:
-            s = etat.survivant_sur_case(cible)
+        # Prise de survivant
+        if drone["survivant"] is None:
+            s = _survivant_sur_case(etat, cible)
             if s:
-                drone.prendre_survivant(s)
-                surv_id = s.identifiant
-                evenement = f"PRISE {s.identifiant}"
-        else:
-            surv_id = drone.survivant.identifiant
+                drone["survivant"] = s["id"]
+                s["etat"] = "embarque"
+                surv_id = s["id"]
+                evenement = f"PRISE {s['id']}"
 
-    if drone.hors_service:
+    # Hors service ?
+    if drone["batterie"] <= 0:
+        drone["hors_service"] = True
         evenement = "HS"
 
+    bat_apres = drone["batterie"]
     _mettre_a_jour_grille(etat)
-    return _format_log_condense(etat, drone.identifiant, depart, cible,
-                                bat_avant, bat_apres, evenement, surv_id)
+    return _log(etat, did, depart, cible, bat_avant, bat_apres, evenement, surv_id)
 
 
-def executer_mouvement_tempete(etat: EtatJeu, tempete: Tempete, cible: Position) -> str:
-    depart = Position(tempete.position.col, tempete.position.lig)
-    tempete.position = cible
-    # Mémoriser la direction choisie manuellement
-    tempete.direction = (
-        cible.col - depart.col,
-        cible.lig - depart.lig
-    )
+def executer_mouvement_tempete(etat, tempete, cible):
+    """Déplace manuellement une tempête (phase J2). Retourne une ligne de log."""
+    tid = tempete["id"]
+    depart = (tempete["col"], tempete["lig"])
+    tempete["dx"] = cible[0] - depart[0]
+    tempete["dy"] = cible[1] - depart[1]
+    tempete["col"], tempete["lig"] = cible
     appliquer_blocages(etat)
     _mettre_a_jour_grille(etat)
-    return _format_log_condense(etat, tempete.identifiant, depart, cible)
+    return _log(etat, tid, depart, cible)
 
 
 # ---------------------------------------------------------------------------
-# Propagation des ZONES X (fin de tour, périodique)
-# Les TEMPÊTES NE SE PROPAGENT PAS.
-# Ce sont les zones X existantes qui s'étendent vers leurs voisins ortho.
+# Phase météo : déplacement automatique des tempêtes (50 % de chance)
 # ---------------------------------------------------------------------------
 
-def propager_zones_x(etat: EtatJeu) -> list:
+def deplacer_tempetes(etat):
+    """
+    Phase automatique en fin de tour.
+    Chaque tempête a PROB_METEO % de chance de bouger.
+    Si elle bouge, elle suit sa direction courante (rebond si obstacle).
+    Retourne la liste des lignes de log.
+    """
+    logs = []
+    hopital = etat["hopital"]
+
+    for tempete in etat["tempetes"].values():
+        tid = tempete["id"]
+        depart = (tempete["col"], tempete["lig"])
+
+        # Tirage météo : 50 % de chance de bouger
+        if random.random() > PROB_METEO:
+            logs.append(_log(etat, tid, depart, depart, evenement="IMMOBILE"))
+            continue
+
+        cible = (tempete["col"] + tempete["dx"],
+                 tempete["lig"] + tempete["dy"])
+
+        if not _case_libre_tempete(etat, cible, hopital):
+            # Rebond : choisir une direction libre aléatoire parmi les 8 voisins
+            voisins = _voisins_diag(depart)
+            libres = [v for v in voisins if _case_libre_tempete(etat, v, hopital)]
+            if libres:
+                cible = random.choice(libres)
+                tempete["dx"] = cible[0] - depart[0]
+                tempete["dy"] = cible[1] - depart[1]
+            else:
+                logs.append(_log(etat, tid, depart, depart, evenement="IMMOBILE"))
+                continue
+
+        tempete["col"], tempete["lig"] = cible
+        logs.append(_log(etat, tid, depart, cible))
+
+    appliquer_blocages(etat)
+    _mettre_a_jour_grille(etat)
+    return logs
+
+
+# ---------------------------------------------------------------------------
+# Propagation des zones X (fin de tour, périodique)
+# ---------------------------------------------------------------------------
+
+def propager_zones_x(etat):
     """
     Tous les PROPAGATION_FREQUENCE tours, les zones X s'étendent.
-    Source : chaque zone X existante (pas les tempêtes).
-    Cibles : cases orthogonalement adjacentes à une zone X.
-    Exclues : bâtiments, hôpital, zones X déjà existantes.
-    Probabilité par case : PROBA_PROPAGATION.
+    Chaque voisin orthogonal d'une zone X existante a PROBA_PROPAGATION
+    de devenir une nouvelle zone X.
     Retourne la liste des lignes de log.
     """
     logs = []
-    if etat.tour % PROPAGATION_FREQUENCE != 0:
+    if etat["tour"] % PROPAGATION_FREQUENCE != 0:
         return logs
 
-    nouvelles_zones = set()
-    hopital_pos = etat.hopital.position
+    nouvelles = set()
+    hopital = etat["hopital"]
 
-    for zone_x in list(etat.zones_x):
-        for voisin in zone_x.voisins_ortho():
-            if etat.batiment_sur_case(voisin):
+    for zone in list(etat["zones_x"]):
+        for voisin in _voisins_ortho(zone):
+            if not _case_valide(voisin):
                 continue
-            if voisin == hopital_pos:
+            if _batiment_sur_case(etat, voisin):
                 continue
-            if voisin in etat.zones_x:
+            if voisin == hopital:
                 continue
-            if voisin in nouvelles_zones:
+            if voisin in etat["zones_x"] or voisin in nouvelles:
                 continue
             if random.random() < PROBA_PROPAGATION:
-                nouvelles_zones.add(voisin)
-                logs.append(f"T{etat.tour:02d}  X   PROPAGATION→{voisin}")
+                nouvelles.add(voisin)
 
-    for pos in nouvelles_zones:
-        etat.zones_x.add(pos)
-        etat.grille.definir(pos, 'X')
+    for pos in nouvelles:
+        etat["zones_x"].add(pos)
+        col, lig = pos
+        logs.append(f"T{etat['tour']:02d}  X   PROPAGATION→{_pos_str(pos)}")
 
-    return logs
-
-
-# ---------------------------------------------------------------------------
-# Déplacement automatique des tempêtes (IA — fin de tour)
-# Appelé dans boucle_saisie() après la phase P2 manuelle.
-# ---------------------------------------------------------------------------
-
-def deplacer_tempetes(etat: EtatJeu) -> list:
-    """
-    Chaque tempête se déplace automatiquement de 1 case selon sa direction courante.
-    Règles :
-      - La tempête suit tempete.direction (dx, dy) initialisée aléatoirement
-      - Si la case suivante est invalide / bâtiment / hôpital :
-          rebond : nouvelle direction valide aléatoire parmi les 8 voisins
-      - Si aucune direction libre : la tempête reste sur place
-    Retourne la liste des lignes de log.
-    """
-    logs = []
-    hopital_pos = etat.hopital.position
-
-    def _cible_libre(pos):
-        return (
-            pos.est_valide()
-            and not etat.batiment_sur_case(pos)
-            and pos != hopital_pos
-        )
-
-    for tempete in etat.tempetes:
-        depart = Position(tempete.position.col, tempete.position.lig)
-        dx, dy = tempete.direction
-        cible = Position(tempete.position.col + dx, tempete.position.lig + dy)
-
-        if not _cible_libre(cible):
-            voisins_libres = [
-                v for v in tempete.position.voisins_diag()
-                if _cible_libre(v)
-            ]
-            if voisins_libres:
-                cible = random.choice(voisins_libres)
-                tempete.direction = (
-                    cible.col - tempete.position.col,
-                    cible.lig - tempete.position.lig
-                )
-            else:
-                logs.append(
-                    _format_log_condense(etat, tempete.identifiant, depart, depart)
-                )
-                continue
-        else:
-            tempete.direction = (dx, dy)
-
-        tempete.position = cible
-        logs.append(
-            _format_log_condense(etat, tempete.identifiant, depart, cible)
-        )
-
-    appliquer_blocages(etat)
     _mettre_a_jour_grille(etat)
     return logs
 
 
 # ---------------------------------------------------------------------------
-# Blocages
+# Blocages drones
 # ---------------------------------------------------------------------------
 
-def appliquer_blocages(etat: EtatJeu):
-    """Bloque les drones sous une tempête. Décrémente les blocages existants."""
-    for drone in etat.drones:
-        if drone.hors_service:
+def appliquer_blocages(etat):
+    """Bloque les drones sous une tempête. Décrémente les compteurs de blocage."""
+    tempetes_pos = {(t["col"], t["lig"]) for t in etat["tempetes"].values()}
+    for drone in etat["drones"].values():
+        if drone["hors_service"]:
             continue
-        if drone.bloque > 0:
-            drone.bloque -= 1
-        t = etat.tempete_sur_case(drone.position)
-        if t:
-            drone.bloque = 2
+        if drone["bloque"] > 0:
+            drone["bloque"] -= 1
+        if (drone["col"], drone["lig"]) in tempetes_pos:
+            drone["bloque"] = 2
 
 
 # ---------------------------------------------------------------------------
-# Vérification fin de partie
+# Fin de partie
 # ---------------------------------------------------------------------------
 
-def verifier_fin_partie(etat: EtatJeu) -> bool:
-    if all(s.est_sauve() for s in etat.survivants):
-        etat.partie_finie = True
-        etat.victoire = True
+def verifier_fin_partie(etat):
+    """Retourne True si la partie est terminée (victoire ou défaite)."""
+    survivants = etat["survivants"]
+    drones = etat["drones"]
+
+    if all(s["etat"] == "sauve" for s in survivants.values()):
+        etat["partie_finie"] = True
+        etat["victoire"] = True
         return True
-    if etat.tour > NB_TOURS_MAX:
-        etat.partie_finie = True
-        etat.victoire = False
+    if etat["tour"] > NB_TOURS_MAX:
+        etat["partie_finie"] = True
+        etat["victoire"] = False
         return True
-    if not etat.drones_actifs():
-        etat.partie_finie = True
-        etat.victoire = False
+    if all(d["hors_service"] for d in drones.values()):
+        etat["partie_finie"] = True
+        etat["victoire"] = False
         return True
     return False
 
 
 # ---------------------------------------------------------------------------
-# Recharge explicite
+# Helpers internes
 # ---------------------------------------------------------------------------
 
-def recharger_drone(etat: EtatJeu, drone: Drone) -> str:
-    if drone.position != etat.hopital.position:
-        return f"{drone.identifiant} n'est pas à l'hôpital"
-    bat_avant = drone.batterie
-    drone.recharger()
-    return f"{drone.identifiant} rechargé : {bat_avant}→{drone.batterie}/{drone.batterie_max}"
+def _case_valide(pos):
+    """Retourne True si (col, lig) est dans les limites de la grille."""
+    col, lig = pos
+    return 0 <= col < GRILLE_TAILLE and 0 <= lig < GRILLE_TAILLE
 
 
-# ---------------------------------------------------------------------------
-# Utilitaire : mise à jour de la grille
-# ---------------------------------------------------------------------------
-
-def _mettre_a_jour_grille(etat: EtatJeu):
-    g = etat.grille
-    taille = g.taille
-    for lig in range(taille):
-        for col in range(taille):
-            g.cases[lig][col] = '.'
-    for pos in etat.zones_x:
-        g.definir(pos, 'X')
-    for s in etat.survivants:
-        if s.etat == "en_attente":
-            g.definir(s.position, 'S')
-    for d in etat.drones:
-        if not d.hors_service:
-            g.definir(d.position, 'D')
-    for t in etat.tempetes:
-        g.definir(t.position, 'T')
-    g.definir(etat.hopital.position, 'H')
-    for b in etat.batiments:
-        g.definir(b.position, 'B')
+def _distance_chebyshev(c1, l1, c2, l2):
+    """Distance de Chebyshev entre deux cases (max des différences absolues)."""
+    return max(abs(c2 - c1), abs(l2 - l1))
 
 
-# ---------------------------------------------------------------------------
-# Utilitaire : log condensé (1 ligne)
-# ---------------------------------------------------------------------------
+def _batiment_sur_case(etat, pos):
+    """Retourne True si la case pos contient un bâtiment."""
+    return pos in etat["batiments"]
 
-def _format_log_condense(etat: EtatJeu, identifiant: str,
-                         depart: 'Position', arrivee: 'Position',
-                         bat_avant: int = None, bat_apres: int = None,
-                         evenement: str = "", surv_id: str = None) -> str:
-    parts = [f"T{etat.tour:02d}", f"{identifiant:3s}", f"{depart}→{arrivee}"]
+
+def _tempete_sur_case(etat, pos):
+    """Retourne l'id de la tempête sur la case, ou None."""
+    for t in etat["tempetes"].values():
+        if (t["col"], t["lig"]) == pos:
+            return t["id"]
+    return None
+
+
+def _survivant_sur_case(etat, pos):
+    """Retourne le dict du survivant en attente sur la case, ou None."""
+    for s in etat["survivants"].values():
+        if s["etat"] == "en_attente" and (s["col"], s["lig"]) == pos:
+            return s
+    return None
+
+
+def _case_libre_tempete(etat, pos, hopital):
+    """Case accessible à une tempête (valide, pas bâtiment, pas hôpital)."""
+    return (
+        _case_valide(pos)
+        and not _batiment_sur_case(etat, pos)
+        and pos != hopital
+    )
+
+
+def _position_aleatoire(occupees, interdites=None, max_tentatives=200):
+    """Retourne un tuple (col, lig) libre, ou None si impossible."""
+    interdit = (interdites or set()) | occupees
+    for _ in range(max_tentatives):
+        col = random.randint(0, GRILLE_TAILLE - 1)
+        lig = random.randint(0, GRILLE_TAILLE - 1)
+        pos = (col, lig)
+        if pos not in interdit:
+            return pos
+    return None
+
+
+def _voisins_ortho(pos):
+    """Retourne les 4 voisins orthogonaux (N/S/E/O) d'une case."""
+    col, lig = pos
+    return [(col, lig - 1), (col, lig + 1), (col - 1, lig), (col + 1, lig)]
+
+
+def _voisins_diag(pos):
+    """Retourne les 8 voisins (orthogonaux + diagonaux) d'une case."""
+    col, lig = pos
+    return [
+        (col + dc, lig + dl)
+        for dc in (-1, 0, 1)
+        for dl in (-1, 0, 1)
+        if not (dc == 0 and dl == 0)
+    ]
+
+
+def _mettre_a_jour_grille(etat):
+    """Reconstruit la grille depuis l'état courant."""
+    g = etat["grille"]
+    for lig in range(GRILLE_TAILLE):
+        for col in range(GRILLE_TAILLE):
+            g[lig][col] = '.'
+    for pos in etat["zones_x"]:
+        g[pos[1]][pos[0]] = 'X'
+    for s in etat["survivants"].values():
+        if s["etat"] == "en_attente":
+            g[s["lig"]][s["col"]] = 'S'
+    for d in etat["drones"].values():
+        if not d["hors_service"]:
+            g[d["lig"]][d["col"]] = 'D'
+    for t in etat["tempetes"].values():
+        g[t["lig"]][t["col"]] = 'T'
+    hcol, hlig = etat["hopital"]
+    g[hlig][hcol] = 'H'
+    for pos in etat["batiments"]:
+        g[pos[1]][pos[0]] = 'B'
+
+
+def _pos_str(pos):
+    """Convertit un tuple (col, lig) en notation lisible ex: B3."""
+    col, lig = pos
+    if 0 <= col < len(LETTRES):
+        return f"{LETTRES[col]}{lig + 1}"
+    return f"({col},{lig})"
+
+
+def position_depuis_chaine(texte):
+    """
+    Convertit une saisie comme 'B3' ou 'b3' en tuple (col, lig).
+    Retourne None si la saisie est invalide.
+    """
+    texte = texte.strip().upper()
+    if len(texte) < 2:
+        return None
+    lettre = texte[0]
+    if lettre not in LETTRES:
+        return None
+    try:
+        lig = int(texte[1:]) - 1
+    except ValueError:
+        return None
+    col = LETTRES.index(lettre)
+    if _case_valide((col, lig)):
+        return (col, lig)
+    return None
+
+
+def _log(etat, identifiant, depart, arrivee,
+         bat_avant=None, bat_apres=None, evenement="", surv_id=None):
+    """Formate une ligne de log condensée pour un mouvement."""
+    dep_str = _pos_str(depart)
+    arr_str = _pos_str(arrivee)
+    parts = [f"T{etat['tour']:02d}", f"{identifiant:3s}", f"{dep_str}→{arr_str}"]
     if bat_avant is not None and bat_apres is not None:
         parts.append(f"bat:{bat_avant}→{bat_apres}")
     if surv_id:

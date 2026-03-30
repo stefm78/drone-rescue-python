@@ -1,62 +1,48 @@
 # =============================================================================
-# logger.py — Journalisation de la partie Drone Rescue
+# logger.py — Journalisation et sauvegarde des résultats
 #
-# Le log est condensé : 1 ligne par mouvement validé uniquement.
-# Les mouvements invalides ne sont PAS loggés (affichés inline dans console.py).
+# Deux fichiers sont créés :
+#   - partie.log   : journal de tous les événements du jeu
+#   - resultats.txt: score et bilan final de la partie
 # =============================================================================
 
 import os
-from config import LOG_FICHIER
+
+_DOSSIER = os.path.dirname(os.path.abspath(__file__))
+_CHEMIN_LOG = os.path.join(_DOSSIER, "partie.log")
+_CHEMIN_RESULTATS = os.path.join(_DOSSIER, "resultats.txt")
 
 
-def log_action(etat, ligne: str):
+def demarrer_log():
+    """Crée (ou recrée) le fichier de log au début de la partie."""
+    with open(_CHEMIN_LOG, "w", encoding="utf-8") as f:
+        f.write("=== DRONE RESCUE — Journal de partie ===\n")
+        f.write("Tour | Entité | Mouvement | Événement\n")
+        f.write("-" * 50 + "\n")
+
+
+def enregistrer_log(ligne):
+    """Ajoute une ligne au journal de la partie."""
+    with open(_CHEMIN_LOG, "a", encoding="utf-8") as f:
+        f.write(ligne + "\n")
+
+
+def sauvegarder_resultats(etat):
     """
-    Ajoute une ligne à l'historique de l'état (pour l'affichage en temps réel)
-    ET l'écrit dans le fichier log.
-
-    N'est appelé que pour les mouvements validés et exécutés.
+    Enregistre le bilan final dans resultats.txt.
+    Conformément aux contraintes du sujet : fichier séparé du journal.
     """
-    etat.historique.append(ligne)
-    _ecrire_fichier(ligne)
+    sauves = sum(1 for s in etat["survivants"].values() if s["etat"] == "sauve")
+    total = len(etat["survivants"])
+    issue = "VICTOIRE" if etat["victoire"] else "DÉFAITE"
 
-
-def sauvegarder_log(etat):
-    """
-    Écrit l'intégralité du log de partie dans le fichier final.
-    (Le fichier est aussi mis à jour en temps réel via log_action.)
-    """
-    try:
-        with open(LOG_FICHIER, 'w', encoding='utf-8') as f:
-            f.write(f"=== Drone Rescue — Partie T{etat.tour:02d} | Score {etat.score} ===\n")
-            f.write(f"=== {'VICTOIRE' if etat.victoire else 'DÉFAITE'} ===\n\n")
-            for ligne in etat.historique:
-                f.write(ligne + "\n")
-    except OSError as e:
-        print(f"  [logger] Impossible d'écrire {LOG_FICHIER} : {e}")
-
-
-# Fichier log temps réel (mode append, créé à la première action)
-_fichier_ouvert = None
-
-
-def _ecrire_fichier(ligne: str):
-    """Écriture temps réel dans le fichier log (append)."""
-    global _fichier_ouvert
-    try:
-        if _fichier_ouvert is None:
-            _fichier_ouvert = open(LOG_FICHIER, 'w', encoding='utf-8')
-        _fichier_ouvert.write(ligne + "\n")
-        _fichier_ouvert.flush()
-    except OSError:
-        pass  # silencieux en cas d'erreur disque
-
-
-def fermer_log():
-    """Ferme le fichier log temps réel (à appeler en fin de partie)."""
-    global _fichier_ouvert
-    if _fichier_ouvert:
-        try:
-            _fichier_ouvert.close()
-        except OSError:
-            pass
-        _fichier_ouvert = None
+    with open(_CHEMIN_RESULTATS, "w", encoding="utf-8") as f:
+        f.write("=== DRONE RESCUE — Résultats ===\n")
+        f.write(f"Issue         : {issue}\n")
+        f.write(f"Score final   : {etat['score']} pt(s)\n")
+        f.write(f"Tours joués   : {etat['tour']}\n")
+        f.write(f"Survivants    : {sauves}/{total} sauvés\n")
+        f.write("\nDétail drones :\n")
+        for d in etat["drones"].values():
+            etat_drone = "HS" if d["hors_service"] else "actif"
+            f.write(f"  {d['id']} : batterie {d['batterie']}/{d['batterie_max']} — {etat_drone}\n")

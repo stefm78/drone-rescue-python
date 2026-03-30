@@ -1,42 +1,54 @@
 # =============================================================================
-# config.py — Paramètres globaux du jeu Drone Rescue
-# Tous les réglages se trouvent ici. Modifier ces valeurs change le comportement
-# du jeu sans toucher au code des autres modules.
+# config.py — Lecture de la configuration depuis config.json
+#
+# Expose toutes les constantes utilisées dans le jeu.
+# Le fichier config.json est la SEULE source de vérité pour les paramètres.
 # =============================================================================
 
-# --- Grille ---
-GRILLE_TAILLE = 12          # La grille est GRILLE_TAILLE x GRILLE_TAILLE (12x12)
+import json
+import os
 
-# --- Entités ---
-NB_DRONES = 6               # Nombre de drones (D1..D6)
-NB_TEMPETES = 4             # Nombre de tempêtes (T1..T4)
-NB_BATIMENTS = 20           # Nombre de bâtiments placés aléatoirement
-NB_SURVIVANTS = 10          # Nombre de survivants à sauver
-NB_ZONES_DANGER = 2         # Nombre de zones dangereuses X initiales
+_DOSSIER = os.path.dirname(os.path.abspath(__file__))
+_CHEMIN_CONFIG = os.path.join(_DOSSIER, "config.json")
 
-# --- Batterie des drones ---
-BATTERIE_MAX = 20           # Capacité maximale de la batterie
-BATTERIE_INIT = 10          # Batterie de départ
+with open(_CHEMIN_CONFIG, encoding="utf-8") as _f:
+    _cfg = json.load(_f)
 
-# --- Déplacements par tour ---
-MAX_DEPL_DRONE = 3          # Nombre de cases max qu'un drone peut parcourir par tour
-MAX_DEPL_TEMPETE = 2        # Nombre de déplacements max d'une tempête par tour
+# ── Grille ──────────────────────────────────────────────────────────────────
+GRILLE_TAILLE = _cfg["grille"]["lignes"]          # grille carrée
 
-# --- Durée de partie ---
-NB_TOURS_MAX = 20           # Nombre de tours avant défaite automatique
+# ── Drones ──────────────────────────────────────────────────────────────────
+NB_DRONES      = _cfg["drones"]["nb_max_j1"]
+BATTERIE_MAX   = _cfg["drones"]["batterie_max"]
+BATTERIE_INIT  = _cfg["drones"]["batterie_depart"]
 
-# --- Propagation des tempêtes ---
-# Probabilité (entre 0.0 et 1.0) qu'une zone X se propage à un tour de propagation
-PROBA_PROPAGATION = 0.3
+# ── Tempêtes ────────────────────────────────────────────────────────────────
+NB_TEMPETES    = _cfg["tempetes"]["nb_max_j2"]
+PROB_METEO     = _cfg["tempetes"]["prob_meteo"]    # 50 % de bouger auto
 
-# --- Propagation : fréquence ---
-# Les zones X se propagent tous les PROPAGATION_FREQUENCE tours
-PROPAGATION_FREQUENCE = 2
+# ── Règles de jeu ───────────────────────────────────────────────────────────
+COUT_TRANSPORT   = _cfg["regles"]["cout_transport_survivant"]  # 2 unités
+COUT_ZONE_X      = _cfg["regles"]["cout_entree_zone_x"]        # 2 unités
+RECHARGE_HOPITAL = _cfg["regles"]["recharge_hopital_par_tour"] # +3 par tour
 
-# --- Position fixe de l'hôpital ---
-# L'hôpital est toujours en A12 (colonne 0, ligne 11 en index 0-based)
-HOPITAL_COL = 0            # Index colonne : 0 = 'A'
-HOPITAL_LIG = 11           # Index ligne   : 11 = ligne 12
+# ── Placement initial ────────────────────────────────────────────────────────
+NB_SURVIVANTS   = 4
+NB_BATIMENTS    = 3
+NB_ZONES_DANGER = 3
 
-# --- Fichier de log ---
-LOG_FICHIER = "partie.log"  # Nom du fichier journal généré à la fin de partie
+# ── Limites de déplacement par tour ─────────────────────────────────────────
+MAX_DEPL_DRONE   = 3   # J1 : 3 déplacements max (1/drone, 3 drones max)
+MAX_DEPL_TEMPETE = 2   # J2 : 2 déplacements max (1/tempête, 2 tempêtes max)
+
+# ── Tour maximum ─────────────────────────────────────────────────────────────
+NB_TOURS_MAX = 20
+
+# ── Propagation des zones X ──────────────────────────────────────────────────
+PROBA_PROPAGATION    = 0.3   # probabilité qu'un voisin ortho devienne X
+PROPAGATION_FREQUENCE = 3    # tous les N tours
+
+# ── Lettres de colonnes ──────────────────────────────────────────────────────
+LETTRES = _cfg["lettres"][:GRILLE_TAILLE]
+
+# ── Directions (pour argparse futur ou aide en jeu) ──────────────────────────
+DIRECTIONS = _cfg["directions"]
