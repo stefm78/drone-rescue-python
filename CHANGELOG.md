@@ -5,6 +5,50 @@ Format : [PR / commit] — Date — Description
 
 ---
 
+## [PR #13] — 30 mars 2026 — Tests collision tempête + CHANGELOG
+
+### Ajouté
+- `tests/test_logique.py` : **5 nouveaux tests** couvrant la règle collision tempête (PR #11)
+  - `test_tempete_bloque_drone_2_tours` : drone bloqué 2 tours après collision
+  - `test_tempete_consomme_batterie_deplacement_normal` : coût = 1 sans survivant
+  - `test_tempete_consomme_batterie_avec_survivant` : coût = COUT_TRANSPORT avec survivant
+  - `test_tempete_zone_x_consomme_batterie_supplementaire` : coût = 1 + COUT_ZONE_X si case X
+  - `test_tempete_batterie_zero_met_hors_service` : batterie 0 → hors_service=True ET bloque=2
+- Total tests : **25** (20 existants + 5 tempête)
+
+### Modifié
+- `CHANGELOG.md` : PRs #11 et #12 ajoutées
+
+---
+
+## [PR #12] — 30 mars 2026 — Livret étudiant : intro rewrite + cours/README.md
+
+### Ajouté
+- `cours/README.md` : index du livret étudiant — tableau 9 modules (fiche / notebook / exercice / correction), guide Option A Colab et Option B local
+
+### Modifié
+- `cours/00_introduction.md` : refonte complète
+  - Plan 6 semaines corrigé (plus de mention POO / classes)
+  - Section « Structure du repo » avec arborescence commentée
+  - Guide de démarrage pas à pas : Option A Google Colab + Option B VS Code local
+  - Schéma progression 5 étapes par module
+  - Structure des 8 cellules d'un notebook expliquée
+  - Convention coordonnées B3 ↔ col/lig
+  - Nouveau prompt IA dédié à Colab
+
+---
+
+## [PR #11] — 30 mars 2026 — Fix : batterie consommée lors d'une collision avec tempête
+
+### Corrigé
+- `jeu/logique.py` — `executer_mouvement()` : **bug de l'ordre des opérations**
+  - **Avant** : la vérification tempête avait lieu avant la déduction batterie → batterie jamais consommée en cas de collision
+  - **Après** : coût calculé et batterie déduite en premier, dans **tous** les cas (avec ou sans survivant, avec ou sans zone X)
+  - Cas limite : batterie tombe à 0 après collision → `hors_service = True` + `bloque = 2` (label `HS+BLOQUE(T1)` dans le log)
+- `ROADMAP.md` : synchronisé 100% (toutes tâches complètes)
+
+---
+
 ## [PR #9] — 30 mars 2026 — Audit console.py
 
 ### Corrigé
@@ -88,4 +132,4 @@ Format : [PR / commit] — Date — Description
 
 ---
 
-*Voir `ROADMAP.md` pour l'état courant et les tâches restantes.*
+*Voir `ROADMAP.md` pour l'état courant.*
