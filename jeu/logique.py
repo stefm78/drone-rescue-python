@@ -16,8 +16,9 @@
 #   - Tour Tempête: 2 déplacements manuels max, 1 case/tempête, chaque tempête 1 fois max
 #   - Recharge hôpital : 1 seule fois par tour par drone
 #   - Hôpital : aucun bâtiment ne peut être adjacent (8 cases)
+#   - Hôpital : positionné ALÉATOIREMENT en début de partie
 #   - Propagation : les ZONES X se propagent depuis les zones X existantes
-#     Les TEMPÊTES ne se propagent PAS — elles se déplacent d'elles-mêmes
+#     Les TEMPÊTE ne se propagent PAS — elles se déplacent d'elles-mêmes
 #   - Déplacement auto des tempêtes (fin de tour) selon direction aléatoire
 # =============================================================================
 
@@ -29,8 +30,7 @@ from config import (
     GRILLE_TAILLE, NB_DRONES, NB_TEMPETES, NB_BATIMENTS, NB_SURVIVANTS,
     BATTERIE_MAX, BATTERIE_INIT, NB_ZONES_DANGER,
     MAX_DEPL_DRONE, MAX_DEPL_TEMPETE, NB_TOURS_MAX,
-    PROBA_PROPAGATION, PROPAGATION_FREQUENCE,
-    HOPITAL_COL, HOPITAL_LIG
+    PROBA_PROPAGATION, PROPAGATION_FREQUENCE
 )
 
 
@@ -42,14 +42,16 @@ def initialiser_partie() -> EtatJeu:
     """
     Crée et retourne un EtatJeu initialisé :
     - Grille vide
-    - Hôpital placé en A12 (position fixe depuis config)
+    - Hôpital placé ALÉATOIREMENT sur la grille
     - Bâtiments placés aléatoirement — JAMAIS adjacents à l'hôpital (8 cases)
     - Drones, Tempêtes, Survivants, Zones X aléatoires
     """
     etat = EtatJeu()
     occupees: set = set()
 
-    pos_hopital = etat.hopital.position
+    # --- Hôpital : position aléatoire ---
+    pos_hopital = _position_aleatoire(occupees)
+    etat.hopital.position = pos_hopital
     etat.grille.definir(pos_hopital, 'H')
     occupees.add(pos_hopital)
 
