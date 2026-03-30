@@ -178,6 +178,7 @@ def initialiser_partie():
 def valider_mouvement(etat, drone, cible):
     """
     Vérifie si le drone (dict) peut se déplacer vers cible (col, lig).
+    Calcule le coût réel du déplacement AVANT de l'autoriser.
     Retourne (True, "") ou (False, raison).
     """
     did = drone["id"]
@@ -186,13 +187,23 @@ def valider_mouvement(etat, drone, cible):
     if drone["bloque"] > 0:
         return False, f"{did} est bloqué ({drone['bloque']} tour(s))"
     if not _case_valide(cible):
-        return False, f"Position hors de la grille"
+        return False, "Position hors de la grille"
     if _distance_chebyshev(drone["col"], drone["lig"], cible[0], cible[1]) > 1:
         return False, "Max 1 case par déplacement"
     if _batiment_sur_case(etat, cible):
-        return False, f"Case bloquée par un bâtiment"
+        return False, "Case bloquée par un bâtiment"
     if drone["batterie"] <= 0:
         return False, f"{did} n'a plus de batterie"
+    # Vérification du coût réel AVANT le déplacement
+    cout_reel = COUT_TRANSPORT if drone["survivant"] else 1
+    if cible in etat["zones_x"]:
+        cout_reel += COUT_ZONE_X
+    if drone["batterie"] < cout_reel:
+        return False, (
+            f"{did} batterie insuffisante "
+            f"({drone['batterie']} unité(s) disponible, {cout_reel} nécessaire(s)) "
+            f"— déplacement annulé"
+        )
     return True, ""
 
 
@@ -271,6 +282,13 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     # Coût supplémentaire zone X
     if cible in etat["zones_x"]:
         cout += COUT_ZONE_X
+
+    # Garde-fou : si batterie insuffisante (appel direct sans validation)
+    if drone["batterie"] < cout:
+        drone["hors_service"] = True
+        _mettre_a_jour_grille(etat)
+        return _log(etat, did, depart, depart, bat_avant, drone["batterie"],
+                    "HS (batterie insuffisante en vol)")
 
     drone["batterie"] = max(0, drone["batterie"] - cout)
     drone["col"], drone["lig"] = cible
@@ -379,11 +397,10 @@ def propager_zones_x(etat):
     Tous les PROPAGATION_FREQUENCE tours, les zones X s'étendent.
     Chaque voisin orthogonal d'une zone X existante a PROBA_PROPAGATION
     de devenir une nouvelle zone X.
-    Retourne la liste des lignes de log (préfixées [X] pour visibilité).
+    Retourne UNE SEULE ligne de log (préfixée [X]) avec toutes les nouvelles positions.
     """
-    logs = []
     if etat["tour"] % PROPAGATION_FREQUENCE != 0:
-        return logs
+        return []
 
     nouvelles = set()
     hopital = etat["hopital"]
@@ -402,18 +419,18 @@ def propager_zones_x(etat):
                 nouvelles.add(voisin)
 
     if nouvelles:
-        # Ligne de résumé en tête (toujours visible dans le log)
-        logs.append(
-            f"T{etat['tour']:02d}  [X] PROPAGATION  +{len(nouvelles)} zone(s) dangereuse(s)"
-        )
-        for pos in sorted(nouvelles):
+        for pos in nouvelles:
             etat["zones_x"].add(pos)
-            logs.append(f"T{etat['tour']:02d}  [X]   +{_pos_str(pos)}")
+        positions_str = ", ".join(_pos_str(p) for p in sorted(nouvelles))
+        log_ligne = (
+            f"T{etat['tour']:02d}  [X] PROPAGATION  "
+            f"+{len(nouvelles)} → {positions_str}"
+        )
     else:
-        logs.append(f"T{etat['tour']:02d}  [X] PROPAGATION  aucune extension ce tour")
+        log_ligne = f"T{etat['tour']:02d}  [X] PROPAGATION  aucune extension ce tour"
 
     _mettre_a_jour_grille(etat)
-    return logs
+    return [log_ligne]
 
 
 # ---------------------------------------------------------------------------
