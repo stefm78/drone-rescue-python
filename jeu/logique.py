@@ -179,6 +179,7 @@ def valider_mouvement(etat, drone, cible):
     """
     Vérifie si le drone (dict) peut se déplacer vers cible (col, lig).
     Calcule le coût réel du déplacement AVANT de l'autoriser.
+    Note : une cible avec tempête est autorisée (le drone se déplace et est bloqué).
     Retourne (True, "") ou (False, raison).
     """
     did = drone["id"]
@@ -195,6 +196,7 @@ def valider_mouvement(etat, drone, cible):
     if drone["batterie"] <= 0:
         return False, f"{did} n'a plus de batterie"
     # Vérification du coût réel AVANT le déplacement
+    # (le coût s'applique même en cas de collision avec une tempête)
     cout_reel = COUT_TRANSPORT if drone["survivant"] else 1
     if cible in etat["zones_x"]:
         cout_reel += COUT_ZONE_X
@@ -261,37 +263,50 @@ def appliquer_recharges_hopital(etat, drones_recharges_ce_tour):
 def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     """
     Déplace le drone vers cible, applique les règles officielles.
+
+    Règle collision tempête :
+      - Le drone SE DÉPLACE vers la case tempête
+      - La batterie est consommée normalement (avec ou sans survivant, zone X incluse)
+      - Le drone est bloqué 2 tours
+      - Aucune livraison/prise de survivant n'a lieu
+
     Retourne une ligne de log.
     """
     did = drone["id"]
     depart = (drone["col"], drone["lig"])
     bat_avant = drone["batterie"]
 
-    # Collision avec une tempête sur la cible ?
-    tempete_sur_cible = _tempete_sur_case(etat, cible)
-    if tempete_sur_cible:
-        drone["bloque"] = 2
-        drone["col"], drone["lig"] = cible
-        _mettre_a_jour_grille(etat)
-        return _log(etat, did, depart, cible, bat_avant, bat_avant,
-                    f"BLOQUE({tempete_sur_cible})")
-
-    # Coût de déplacement
+    # Coût de déplacement (calculé avant de savoir s'il y a une tempête)
     cout = COUT_TRANSPORT if drone["survivant"] else 1
-
-    # Coût supplémentaire zone X
     if cible in etat["zones_x"]:
         cout += COUT_ZONE_X
 
-    # Garde-fou : si batterie insuffisante (appel direct sans validation)
+    # Garde-fou : batterie insuffisante (appel direct sans validation)
     if drone["batterie"] < cout:
         drone["hors_service"] = True
         _mettre_a_jour_grille(etat)
         return _log(etat, did, depart, depart, bat_avant, drone["batterie"],
                     "HS (batterie insuffisante en vol)")
 
+    # Consommation de la batterie (dans tous les cas, y compris collision tempête)
     drone["batterie"] = max(0, drone["batterie"] - cout)
     drone["col"], drone["lig"] = cible
+
+    # Collision avec une tempête sur la cible ?
+    tempete_sur_cible = _tempete_sur_case(etat, cible)
+    if tempete_sur_cible:
+        drone["bloque"] = 2
+        # Hors service si batterie épuisée suite au déplacement
+        if drone["batterie"] <= 0:
+            drone["hors_service"] = True
+            _mettre_a_jour_grille(etat)
+            return _log(etat, did, depart, cible, bat_avant, drone["batterie"],
+                        f"HS+BLOQUE({tempete_sur_cible})")
+        _mettre_a_jour_grille(etat)
+        return _log(etat, did, depart, cible, bat_avant, drone["batterie"],
+                    f"BLOQUE({tempete_sur_cible})")
+
+    # Mouvement normal (pas de tempête sur la cible)
     evenement = ""
     surv_id = drone["survivant"]
 

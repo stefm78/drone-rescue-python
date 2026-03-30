@@ -4,7 +4,7 @@
 
 ---
 
-## État au 30 mars 2026 — 19h00
+## État au 30 mars 2026 — 20h00
 
 ### ✅ Phases terminées
 
@@ -25,16 +25,13 @@
 | PR #6 | Fix log épinglé + synchro `nb_01`→`nb_04` 0-based | ✅ |
 | PR #7 | Fix batterie insuffisante + propagation 1 ligne + archive prompt | ✅ |
 | PR #8 | `propager_zones_x` 1 ligne stricte + `valider_mouvement` coût réel + `nb_09` + docs | ✅ |
+| PR #9 | Audit `console.py` — batterie > 0, fin de partie après tempêtes | ✅ |
+| PR #10 | `GUIDE_FORMATEUR.md` maj, `tests/test_logique.py` (20 tests), `CHANGELOG.md` | ✅ |
+| PR #11 | **Fix collision tempête** : batterie consommée avant blocage (`logique.py`) | ✅ |
 
-### 🟡 Tâches restantes (optionnelles)
+### ✅ Projet terminé à 100%
 
-| Priorité | Action |
-|----------|--------|
-| 🟡 | Audit `console.py` (7,9 Ko) — cohérence log + batterie |
-| 🟡 | Vérifier `nb_05`→`nb_08` : convention 0-based |
-| 🟢 | `GUIDE_FORMATEUR.md` — mise à jour (sans POO) |
-| 🟢 | `tests/test_logique.py` — pytest basique |
-| 🟢 | `CHANGELOG.md` — historique versions |
+Tous les fichiers sont complets, validés et testés.
 
 ---
 
@@ -71,8 +68,8 @@ Projet : drone-rescue-python (pédagogique Python débutant).
 Lire : README.md → archive/prompt.md → ROADMAP.md
 Architecture : 100% dictionnaires, ZÉRO POO, règles officielles appliquées.
 Coord. internes : col/lig int 0-based. Affichage : lettre (A-J) + numéro 1-based.
-Toutes les PRs (1→8) mergées. Restant (optionnel) : audit console.py, nb_05-08 0-based, GUIDE_FORMATEUR, tests, CHANGELOG.
+Toutes les PRs (1→11) mergées. Projet complet à 100%.
 Règles : pas de placeholder, pas de troncature, chaque fichier prêt à être poussé.
 ```
 
-*MAJ : 30 mars 2026 19h00 CEST — PRs 1→8 terminées ✅ — Projet à ~95%*
+*MAJ : 30 mars 2026 20h00 CEST — PRs 1→11 terminées ✅ — Projet à 100%*
