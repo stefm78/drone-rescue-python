@@ -1,218 +1,210 @@
 # =============================================================================
 # CORRECTION 07 — Logique de jeu
 # Module correspondant : cours/07_logique_de_jeu.md
+# Convention : colonne str 'A'..'L', ligne int 1-based 1..12
 # =============================================================================
 
 import random
 
 
-# Classe Pos réutilisée depuis l'exercice (simplifiée pour les tests)
-class Pos:
-    def __init__(self, col, lig):
-        self.col = col
-        self.lig = lig
-    def __str__(self):
-        return f"{self.col}{self.lig}"
-    def dist(self, autre):
-        return max(abs(ord(self.col) - ord(autre.col)), abs(self.lig - autre.lig))
-    def __eq__(self, autre):
-        return self.col == autre.col and self.lig == autre.lig
+# -----------------------------------------------------------------------------
+# CORRECTION 0 — Helpers utilisés dans ce module
+# -----------------------------------------------------------------------------
+# Ces fonctions représentent la convention pédagogique du projet :
+#   colonne : str lettre 'A'..'L'
+#   ligne   : int 1-based 1..12
+# Elles sont cohérentes avec cours/03 et cours/07.
+# -----------------------------------------------------------------------------
+
+def distance_chebyshev(col1: str, lig1: int, col2: str, lig2: int) -> int:
+    """Distance de Chebyshev entre deux cases (diagonal = 1 pas)."""
+    return max(abs(ord(col1) - ord(col2)), abs(lig1 - lig2))
+
+
+def coord_valide(colonne: str, ligne: int, taille: int = 12) -> bool:
+    """True si la coordonnée est dans la grille."""
+    return 'A' <= colonne <= chr(ord('A') + taille - 1) and 1 <= ligne <= taille
 
 
 # -----------------------------------------------------------------------------
 # CORRECTION 1 — Valider un mouvement de drone
 # -----------------------------------------------------------------------------
-# Ordre des vérifications : déplacements restants → HS → bloqué → distance → bâtiment.
+# Ordre des vérifications : déplacements restants → HS → bloqué → grille → distance.
 # On retourne (False, motif) dès qu'une règle est violée, (True, "") si tout est OK.
+# Le drone expose : colonne str, ligne int, batterie int, bloque int, survivant.
 # -----------------------------------------------------------------------------
 
-def valider_mouvement_drone(drone, cible_pos, grille, depl_restants):
+def valider_mouvement_drone(
+    drone,
+    col_cible: str, lig_cible: int,
+    depl_restants: int,
+    taille: int = 12
+) -> tuple:
     """
-    Valide le déplacement du drone vers cible_pos.
-    grille : dict {"A1": ".", "B2": "B", ...}
+    Valide le déplacement du drone vers (col_cible, lig_cible).
     Retourne (bool, message_erreur).
     """
     if depl_restants <= 0:
-        return False, "plus de déplacements ce tour"
+        return False, 'plus de déplacements ce tour'
     if drone.batterie == 0:
-        return False, "drone HS"
-    if drone.blocage > 0:
-        return False, "drone bloqué"
-    if drone.position.dist(cible_pos) != 1:
-        return False, "distance > 1"
-    cle = f"{cible_pos.col}{cible_pos.lig}"
-    if grille.get(cle) == "B":
-        return False, "bâtiment"
-    return True, ""
+        return False, 'drone HS'
+    if drone.bloque > 0:
+        return False, f'drone bloqué ({drone.bloque} tours restants)'
+    if not coord_valide(col_cible, lig_cible, taille):
+        return False, 'case hors grille'
+    if distance_chebyshev(drone.colonne, drone.ligne, col_cible, lig_cible) != 1:
+        return False, 'distance invalide (> 1 case)'
+    return True, ''
 
 
 # Tests
-if __name__ == "__main__":
+if __name__ == '__main__':
     class DroneFictif:
-        def __init__(self):
-            self.position = Pos("B", 3)
-            self.batterie = 8
-            self.blocage = 0
+        colonne = 'B'; ligne = 3; batterie = 8; bloque = 0; survivant = None
 
-    grille_test = {"C3": ".", "B4": "B", "C4": "."}
     d = DroneFictif()
-
-    ok, msg = valider_mouvement_drone(d, Pos("C", 3), grille_test, 3)
-    print(ok, msg)    # True ""
-
-    ok, msg = valider_mouvement_drone(d, Pos("B", 4), grille_test, 3)
-    print(ok, msg)    # False bâtiment
-
-    ok, msg = valider_mouvement_drone(d, Pos("D", 5), grille_test, 3)
-    print(ok, msg)    # False distance > 1
+    print(valider_mouvement_drone(d, 'C', 3, 3))   # (True, '')
+    print(valider_mouvement_drone(d, 'D', 5, 3))   # (False, 'distance invalide...')
+    print(valider_mouvement_drone(d, 'C', 3, 0))   # (False, 'plus de déplacements...')
+    d.batterie = 0
+    print(valider_mouvement_drone(d, 'C', 3, 3))   # (False, 'drone HS')
 
 
 # -----------------------------------------------------------------------------
-# CORRECTION 2 — Collecter et livrer un survivant
+# CORRECTION 2 — Exécuter un mouvement (collecte, livraison, blocage)
 # -----------------------------------------------------------------------------
-# Séquence :
-#   1. Mettre à jour la position du drone
-#   2. Consommer la batterie
-#   3. Si la case d'arrivée est "S" et que le drone est libre → COLLECTE
-#   4. Si la case d'arrivée est "H" et que le drone porte un survivant → LIVRAISON
-#   5. Si la case d'arrivée est "H" sans survivant → RECHARGE (batterie max)
+# Séquence : déplacer → consommer batterie → vérifier tempête → survivant → hôpital.
+# On retourne une liste d'événements (tuples) pour que la vue les affiche.
+# Jamais de print() ici : la logique ne gère pas l'affichage.
 # -----------------------------------------------------------------------------
 
-def executer_mouvement(drone, cible_pos, grille, score):
+def executer_mouvement(drone, col_cible: str, lig_cible: int, etat) -> list:
     """
-    Déplace le drone, gère collecte/livraison/recharge.
-    Retourne (nouveau_score, evenement_str).
+    Déplace le drone (mouvement déjà validé), applique les effets.
+    etat : objet avec .tempetes, .survivants, .hopital (colonne+ligne), .score
+    Retourne la liste des événements survenus.
     """
-    ancien_pos_key = f"{drone.position.col}{drone.position.lig}"
-    nouvelle_pos_key = f"{cible_pos.col}{cible_pos.lig}"
+    evenements = []
+    drone.colonne = col_cible
+    drone.ligne   = lig_cible
 
-    # Libérer l'ancienne case (si occupée par ce drone uniquement)
-    if grille.get(ancien_pos_key, ".").startswith("D"):
-        grille[ancien_pos_key] = "."
-
-    # Déplacer le drone
-    drone.position = cible_pos
-    drone.consommer_batterie()
-
-    evenement = ""
-    case_cible = grille.get(nouvelle_pos_key, ".")
-
-    if case_cible == "S" and drone.survivant is None:
-        # Collecte d'un survivant
-        drone.survivant = "S"  # dans le vrai jeu : identifiant précis
-        grille[nouvelle_pos_key] = drone.identifiant if hasattr(drone, 'identifiant') else "D"
-        evenement = "COLLECTE"
-
-    elif case_cible == "H":
-        if drone.survivant is not None:
-            # Livraison à l'hôpital
-            score += 1
-            drone.survivant = None
-            evenement = "LIVRAISON +1pt"
-        else:
-            # Recharge à l'hôpital
-            drone.batterie = drone.batterie_max if hasattr(drone, 'batterie_max') else drone.batterie
-            evenement = "RECHARGE"
+    # Tempête sur la case d'arrivée ? → blocage, pas de consommation batterie
+    tempete = next(
+        (t for t in etat.tempetes if t.colonne == col_cible and t.ligne == lig_cible),
+        None
+    )
+    if tempete:
+        drone.bloque = 2
+        evenements.append(('BLOQUE', drone.identifiant, tempete.identifiant))
     else:
-        grille[nouvelle_pos_key] = drone.identifiant if hasattr(drone, 'identifiant') else "D"
+        drone.batterie = max(0, drone.batterie - 1)
 
-    return score, evenement
+    # Survivant libre sur la case ? → chargement automatique
+    surv = next(
+        (s for s in etat.survivants
+         if s.etat == 'en_attente' and s.colonne == col_cible and s.ligne == lig_cible),
+        None
+    )
+    if surv and drone.survivant is None:
+        drone.survivant = surv
+        surv.etat = 'porte'
+        evenements.append(('CHARGE', drone.identifiant, surv.identifiant))
 
+    # Hôpital + drone porte un survivant → livraison + recharge
+    if (col_cible == etat.hopital.colonne and lig_cible == etat.hopital.ligne
+            and drone.survivant):
+        s = drone.survivant
+        s.etat = 'sauve'
+        drone.survivant = None
+        etat.score += 1
+        drone.batterie = drone.batterie_max
+        evenements.append(('LIVRAISON', drone.identifiant, s.identifiant))
 
-# Tests
-if __name__ == "__main__":
-    class DroneFictif2:
-        identifiant = "D1"
-        batterie_max = 20
-        def __init__(self):
-            self.position = Pos("B", 3)
-            self.batterie = 8
-            self.survivant = None
-        def consommer_batterie(self):
-            self.batterie = max(0, self.batterie - 1)
-
-    grille2 = {"C3": "S", "A12": "H"}
-    d2 = DroneFictif2()
-
-    score, evt = executer_mouvement(d2, Pos("C", 3), grille2, 0)
-    print(score, evt)          # 0 COLLECTE
-    print(d2.survivant)        # S
-    print(grille2.get("C3"))   # D1 (case maintenant occupée par le drone)
+    return evenements
 
 
 # -----------------------------------------------------------------------------
 # CORRECTION 3 — Propagation d'une tempête
 # -----------------------------------------------------------------------------
-# On calcule les 4 voisins orthogonaux (Δcol ou Δlig = ±1, pas les deux).
-# On filtre les cases hors grille et les cases protégées (B, H, S).
-# Pour chaque candidat, random.random() < proba décide si la propagation a lieu.
+# 4 directions orthogonales. On filtre hors grille et cases protégées.
+# Chaque voisin éligible est transformé en X avec probabilité proba.
+# Convention : tempête.colonne str, tempête.ligne int.
 # -----------------------------------------------------------------------------
 
-def propager_tempete(grille, tempete_pos, proba=0.3, taille=12):
+def propager_tempete(tempete, etat, proba: float = 0.3) -> list:
     """
-    Propage une zone X depuis tempete_pos (4 directions orthogonales).
-    Retourne la liste des nouvelles positions X créées.
+    Propage la tempête orthogonalement.
+    Retourne la liste des tuples (colonne, ligne) nouvellement affectés.
     """
-    directions = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # gauche, droite, haut, bas
-    nouvelles_zones = []
+    nouvelles = []
+    COLS = [chr(ord('A') + i) for i in range(12)]
+    i_col = ord(tempete.colonne) - ord('A')
 
-    col_idx = ord(tempete_pos.col) - ord('A')
-    lig_idx = tempete_pos.lig
-
-    for dcol, dlig in directions:
-        nc = col_idx + dcol
-        nl = lig_idx + dlig
-        if not (0 <= nc < taille and 1 <= nl <= taille):
-            continue  # hors grille
-        cle = f"{chr(65 + nc)}{nl}"
-        contenu = grille.get(cle, ".")
-        if contenu in ("B", "H", "S"):
-            continue  # case protégée
+    for dcol, dlig in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+        nc = i_col + dcol
+        nl = tempete.ligne + dlig
+        if not (0 <= nc < 12 and 1 <= nl <= 12):
+            continue
+        col_v = COLS[nc]
+        # Case protégée : hôpital
+        if col_v == etat.hopital.colonne and nl == etat.hopital.ligne:
+            continue
         if random.random() < proba:
-            grille[cle] = "X"
-            nouvelles_zones.append(cle)
+            nouvelles.append((col_v, nl))
 
-    return nouvelles_zones
+    return nouvelles
 
 
-# Tests (résultats aléatoires — proba=1.0 pour test déterministe)
-if __name__ == "__main__":
-    random.seed(42)
-    grille3 = {"F6": "X", "E6": ".", "G6": ".", "F5": "B", "F7": "."}
-    nouvelles = propager_tempete(grille3, Pos("F", 6), proba=1.0)
-    print(sorted(nouvelles))  # ['E6', 'F7', 'G6']  (F5 est un bâtiment)
-    print({k: v for k, v in grille3.items() if v == "X"})
+# Tests (proba=1.0 pour résultat déterministe)
+if __name__ == '__main__':
+    class Hopital:
+        colonne = 'A'; ligne = 12
+
+    class Tempete:
+        identifiant = 'T1'; colonne = 'F'; ligne = 6
+
+    class EtatSimple:
+        tempetes   = []
+        survivants = []
+        hopital    = Hopital()
+        score      = 0
+
+    t = Tempete()
+    e = EtatSimple()
+    nouvelles = propager_tempete(t, e, proba=1.0)
+    print(sorted(nouvelles))  # [('E',6), ('F',5), ('F',7), ('G',6)]
 
 
 # -----------------------------------------------------------------------------
 # CORRECTION 4 — Vérifier la fin de partie
 # -----------------------------------------------------------------------------
-# Ordre de priorité : VICTOIRE (cas le plus favorable) → DEFAITE_DRONES
-# → DEFAITE_TOURS → EN_COURS.
+# Ordre de priorité : VICTOIRE → DEFAITE_DRONES → DEFAITE_TOURS → EN_COURS.
+# drone.batterie int, drone.survivant : None ou objet.
 # -----------------------------------------------------------------------------
 
-def verifier_fin_partie(tour_actuel, tour_max, drones, nb_survivants_restants):
+def verifier_fin_partie(
+    tour_actuel: int, tour_max: int,
+    drones: list, nb_survivants_restants: int
+) -> str:
     """
-    Retourne l'état de la partie :
-    "VICTOIRE", "DEFAITE_TOURS", "DEFAITE_DRONES", ou "EN_COURS".
+    Retourne : 'VICTOIRE', 'DEFAITE_TOURS', 'DEFAITE_DRONES', ou 'EN_COURS'.
     """
     if nb_survivants_restants == 0:
-        return "VICTOIRE"
-    if tour_actuel >= tour_max:
-        return "DEFAITE_TOURS"
+        return 'VICTOIRE'
     if all(d.batterie == 0 for d in drones):
-        return "DEFAITE_DRONES"
-    return "EN_COURS"
+        return 'DEFAITE_DRONES'
+    if tour_actuel >= tour_max:
+        return 'DEFAITE_TOURS'
+    return 'EN_COURS'
 
 
 # Tests
-if __name__ == "__main__":
-    class DroneSimple:
+if __name__ == '__main__':
+    class DS:
         def __init__(self, bat): self.batterie = bat
 
-    drones_ok = [DroneSimple(10), DroneSimple(5), DroneSimple(0)]
-    print(verifier_fin_partie(5, 20, drones_ok, 3))    # EN_COURS
-    print(verifier_fin_partie(5, 20, drones_ok, 0))    # VICTOIRE
+    drones_ok = [DS(10), DS(5), DS(0)]
+    print(verifier_fin_partie(5,  20, drones_ok, 3))   # EN_COURS
+    print(verifier_fin_partie(5,  20, drones_ok, 0))   # VICTOIRE
     print(verifier_fin_partie(20, 20, drones_ok, 3))   # DEFAITE_TOURS
-    drones_hs = [DroneSimple(0), DroneSimple(0)]
-    print(verifier_fin_partie(5, 20, drones_hs, 3))    # DEFAITE_DRONES
+    print(verifier_fin_partie(5,  20, [DS(0), DS(0)], 3))  # DEFAITE_DRONES
