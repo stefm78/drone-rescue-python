@@ -1,153 +1,259 @@
 # Module 01 — Structures de base
 
-## Concepts couverts
+> **Fil rouge :** Dans le jeu, un drone est un dictionnaire, une grille est une liste
+> de listes, une position est un tuple. À la fin de ce module, tu sauras
+> manipuler ces trois structures fondamentales.
 
-- Variables et types : `int`, `float`, `str`, `bool`
-- Listes : création, indexation, modification, méthodes (`append`, `pop`, `len`)
-- Dictionnaires : clés/valeurs, accès, modification
-- Tuples : immutabilité, déstructuration
-- `None` et les valeurs manquantes
+---
 
-## Lien avec le projet
-
-Dans Drone Rescue, chaque entité est d'abord représentée par un dictionnaire
-(avant d'apprendre les classes au module 05) :
+## 1. Variables et types
 
 ```python
-# Un drone représenté par un dictionnaire
+batterie = 10          # int
+identifiant = "D1"    # str
+hors_service = False  # bool
+survivant = None      # absence de valeur
+```
+
+- `int` : entier, utilisé pour les positions, la batterie, le score
+- `str` : chaîne, utilisée pour les identifiants (`"D1"`, `"S3"`)
+- `bool` : vrai/faux, utilisé pour les états (`hors_service`, `partie_finie`)
+- `None` : absence de valeur (le drone ne porte pas de survivant)
+
+---
+
+## 2. Listes — séquences modifiables
+
+```python
+batiments = [(1, 2), (3, 4), (5, 6)]   # liste de tuples
+
+batiments.append((7, 8))    # ajouter en fin
+batiments.pop()             # retirer le dernier
+print(len(batiments))       # 3
+print(batiments[0])         # (1, 2)
+```
+
+La grille du jeu est une **liste de listes** :
+
+```python
+GRILLE_TAILLE = 4
+grille = []
+for lig in range(GRILLE_TAILLE):
+    ligne = []
+    for col in range(GRILLE_TAILLE):
+        ligne.append('.')
+    grille.append(ligne)
+
+grille[1][2] = 'D'   # drone en colonne 2 (index), ligne 1 (index)
+```
+
+---
+
+## 3. Dictionnaires — clés et valeurs
+
+Un drone est représenté par un dictionnaire :
+
+```python
 drone = {
-    'id'         : 'D1',
-    'colonne'    : 'A',   # str lettre : 'A'..'L'  ← convention du projet
-    'ligne'      : 1,     # int 1-based : 1..12
-    'batterie'   : 10,
-    'batterie_max': 20,
-    'survivant'  : None,  # None = ne porte personne
-    'bloque'     : 0      # nombre de tours bloqué
+    "id"          : "D1",
+    "col"         : 0,       # entier (index)
+    "lig"         : 5,       # entier (index)
+    "batterie"    : 10,
+    "batterie_max": 20,
+    "survivant"   : None,
+    "bloque"      : 0,
+    "hors_service": False,
 }
 
-# Accès et modification
-print(drone['colonne'])       # 'A'
-drone['batterie'] -= 1        # consommer 1 de batterie
-drone['colonne'] = 'B'        # déplacer vers la colonne B
+# Lire
+print(drone["batterie"])    # 10
+
+# Modifier
+drone["batterie"] -= 1
+drone["col"] = 1
+
+# Vérifier l'absence
+if drone["survivant"] is None:
+    print("Drone libre")
 ```
 
-La grille est une **liste de listes** — `grille[i][j]` avec :
-- `i` = index ligne = `ligne - 1`  (ex: ligne 1 → index 0)
-- `j` = index colonne = `ord(colonne) - ord('A')`  (ex: 'A' → 0, 'B' → 1)
+---
+
+## 4. Tuples — valeurs immuables
+
+Une position est un tuple `(col, lig)` :
 
 ```python
-# Grille 3×3 (exemple réduit)
-grille = [
-    ['.', 'B', '.'],   # ligne 1
-    ['.', '.', 'S'],   # ligne 2
-    ['H', '.', '.']    # ligne 3
+hopital = (0, 7)   # colonne 0, ligne 7
+col, lig = hopital   # déstructuration
+print(f"Hôpital en col {col}, lig {lig}")
+```
+
+Un tuple ne peut pas être modifié après création.
+C'est utile pour des positions fixes (hôpital, zones X) qu'on ne doit pas changer par erreur.
+
+```python
+hopital[0] = 3   # ❌ TypeError : tuple ne peut pas être modifié
+```
+
+---
+
+## 5. List comprehension (#28)
+
+Une **list comprehension** est une façon compacte de construire une liste.
+
+### De la boucle classique à la comprehension
+
+```python
+# Avec une boucle classique
+carres = []
+for n in range(6):
+    carres.append(n * n)
+# carres = [0, 1, 4, 9, 16, 25]
+
+# Équivalent avec une comprehension
+carres = [n * n for n in range(6)]
+```
+
+Même chose avec une condition :
+
+```python
+# Avec une boucle + condition
+survivants_restants = []
+for s in survivants:
+    if s["etat"] != "sauve":
+        survivants_restants.append(s)
+
+# Avec une comprehension + condition
+survivants_restants = [s for s in survivants if s["etat"] != "sauve"]
+```
+
+Dans le jeu, les cases libres sont calculées ainsi :
+
+```python
+toutes_cases = [(col, lig) for col in range(taille) for lig in range(taille)]
+cases_libres = [c for c in toutes_cases if c not in batiments]
+```
+
+> 💡 Règle pratique : si la comprehension fait plus d'une ligne, utilise une boucle classique.
+> Lisibilité avant tout.
+
+---
+
+## 6. Index 0-basé vs affichage 1-basé
+
+Dans le code, les positions sont des entiers **0-basés** (de 0 à taille-1).
+Dans l'affichage, on montre des positions **1-basées** (de 1 à taille).
+
+```python
+lig_interne = 0         # index en Python
+lig_affichee = lig_interne + 1   # 0 -> 1
+
+lig_saisie = 3          # le joueur tape "3"
+lig_interne = lig_saisie - 1     # 3 -> 2
+```
+
+---
+
+## 7. Exercice A — Manipuler un dict drone
+
+```python
+drone = {
+    "id": "D1", "col": 0, "lig": 0,
+    "batterie": 10, "batterie_max": 20,
+    "survivant": None, "bloque": 0, "hors_service": False
+}
+
+# 1. Afficher la batterie
+print(drone["batterie"])   # 10
+
+# 2. Déplacer le drone en (2, 3)
+drone["col"] = 2
+drone["lig"] = 3
+
+# 3. Consommer 1 batterie
+drone["batterie"] -= 1
+
+# 4. Vérifier si le drone est libre
+if drone["survivant"] is None:
+    print("Libre")
+```
+
+---
+
+## 8. Exercice B — List comprehension
+
+```python
+survivants = [
+    {"id": "S1", "etat": "sauve"},
+    {"id": "S2", "etat": "en_attente"},
+    {"id": "S3", "etat": "sauve"},
+    {"id": "S4", "etat": "en_attente"},
 ]
 
-# Accéder à la case colonne 'B', ligne 1
-j = ord('B') - ord('A')  # → 1
-i = 1 - 1                # → 0
-case = grille[i][j]      # → 'B'
+# Construire la liste des survivants non encore sauvés
+restants = [s for s in survivants if s["etat"] != "sauve"]
+print(len(restants))   # 2
 ```
 
-Une position est souvent stockée dans un **tuple immuable** :
-
-```python
-position = ('A', 1)      # (colonne str, ligne int)
-col, lig = position      # déstructuration
-print(f"Position : {col}{lig}")  # A1
-```
+---
 
 ## Erreurs classiques
 
-**Erreur 1 — Modifier une liste en l'itérant**
+**Erreur 1 — Modifier une liste pendant qu'on l'itère**
 ```python
-# ❌ Résultat imprévisible : D2 n'est pas retiré
-drones = ['D1', 'D2', 'D3']
+# ❌ Résultat imprévisible
 for d in drones:
-    if d == 'D2':
+    if d == "D2":
         drones.remove(d)
-print(drones)  # ['D1', 'D3'] ← par chance ici, mais pas toujours
 
-# ✅ Correct : itérer sur une copie
+# ✅ Itérer sur une copie
 for d in drones[:]:
-    if d == 'D2':
+    if d == "D2":
         drones.remove(d)
 ```
 
-**Erreur 2 — Utiliser `0` ou `''` à la place de `None`**
+**Erreur 2 — Comparer `None` avec `==`**
 ```python
-# ❌ Ambigu : 0 peut être une vraie valeur de batterie
-drone['survivant'] = 0      # ne porte pas de survivant ?
+# ❌ Fonctionne souvent, mais déconseillé
+if drone["survivant"] == None:
+    ...
 
-# ✅ Explicite : None signifie « absent »
-drone['survivant'] = None
-if drone['survivant'] is None:   # toujours comparer avec `is`
-    print('Drone libre')
+# ✅ Toujours utiliser `is`
+if drone["survivant"] is None:
+    ...
 ```
 
-**Erreur 3 — Confondre index 0-based et coordonnées 1-based**
+**Erreur 3 — `grille[col][lig]` au lieu de `grille[lig][col]`**
 ```python
-# La grille est stockée en 0-based, mais le JEU parle en 1-based
-ligne_jeu = 1          # ligne 1 du jeu
-index_grille = ligne_jeu - 1   # → 0  (index Python)
-grille[index_grille]   # ✅
+# ❌ Inverse les coordonnées
+grille[col][lig] = 'D'
 
-# ❌ Erreur classique :
-grille[ligne_jeu]      # → ligne 2 du jeu !
+# ✅
+grille[lig][col] = 'D'
 ```
 
-## Exercice de compréhension
+---
 
-**Q1.** Qu'affiche ce code ?
-```python
-pos = ('B', 7)
-col, lig = pos
-print(f"{col}{lig}")
-```
-<details><summary>Réponse</summary>
+## Résumé des points clés
 
-`B7` — déstructuration du tuple, puis f-string.
-</details>
+| Structure | Exemple | Modifiable ? |
+|-----------|---------|-------------|
+| Liste | `['.', 'D', '.']` | Oui |
+| Dictionnaire | `{"id": "D1", "bat": 10}` | Oui |
+| Tuple | `(0, 7)` | Non |
+| Set | `{(1, 2), (3, 4)}` | Oui (add/discard) |
 
-**Q2.** Un drone a `batterie = 0` et `survivant = None`. Que signifie `survivant is None` ?
-<details><summary>Réponse</summary>
-
-`True` — le drone ne porte pas de survivant. `None` représente l'absence de valeur.
-</details>
-
-**Q3.** Comment initialiser une grille 12×12 remplie de `'.'` en une ligne ?
-<details><summary>Réponse</summary>
-
-```python
-grille = [['.' for _ in range(12)] for _ in range(12)]
-```
-</details>
+---
 
 ## Exercices du module
 
 Voir `exercices/ex_01_structures.py`
 
-## Tips et best practices
+## Prompts IA utiles
 
-- **Nomme clairement tes variables** : `batterie_drone` plutôt que `b` ou `bd`.
-- **Préfère les f-strings** pour formater du texte :
-  ```python
-  print(f"Drone {drone['id']} en {drone['colonne']}{drone['ligne']} — bat : {drone['batterie']}")
-  ```
-- **Les tuples pour les coordonnées** : une position ne devrait pas être modifiable par erreur.
-- **`None` est ton ami** : utilise-le explicitement pour indiquer l'absence de valeur (pas `0`, pas `''`).
-- **Convention du projet** : colonnes = lettre str `'A'`…`'L'`, lignes = int `1`…`12`.
+> *« Quelle différence entre une liste et un tuple en Python ? Quand utiliser l'un plutôt que l'autre ? »*
 
-## Références
+> *« Comment construire une liste avec une condition en Python (list comprehension) ? »*
 
-- [Docs Python — Listes](https://docs.python.org/fr/3/tutorial/datastructures.html#more-on-lists)
-- [Docs Python — Dictionnaires](https://docs.python.org/fr/3/tutorial/datastructures.html#dictionaries)
-- [Real Python — Python Tuples](https://realpython.com/python-tuple/)
-
-## Prompts IA
-
-> *« Explique-moi la différence entre une liste et un tuple en Python avec un exemple concret de jeu de plateau. »*
-
-> *« Comment représenter une grille de jeu en Python avec une liste de listes ? Montre-moi comment accéder à une case par ses coordonnées colonne lettre + ligne entière. »*
-
-> *« Quelle est la différence entre `None`, `False` et `0` en Python ? Quand utiliser l'un plutôt que l'autre ? »*
+> *« Comment représenter une grille de jeu en Python avec une liste de listes ? »*

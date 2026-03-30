@@ -1,105 +1,114 @@
-# Module 09 (Annexe) — Notice d’assemblage global
+# Module 09 — Assemblage final
 
-Ce module est la **notice d’assemblage** : il ne t’apprend pas de nouveau concept Python, il t’explique comment connecter tous les modules pour obtenir le jeu complet.
+Ce module est la **notice d'assemblage** : il ne t'apprend pas de nouveau concept Python,
+il t'explique comment tous les fichiers s'articulent pour former le jeu complet.
 
-## Structure finale du dossier `jeu/`
+---
+
+## 1. Structure du projet
 
 ```
 jeu/
-├── config.py       ← Paramètres globaux (modifiables par argparse)
-├── modeles.py      ← Classes Drone, Tempete, Survivant, Batiment, Hopital, EtatJeu
-├── logique.py      ← Règles métier (déplacements, propagation, fin de partie)
-├── affichage.py    ← Rendu ASCII (grille, tableaux de bord, historique)
-├── console.py      ← Boucle de saisie, parsing des commandes
-├── logger.py       ← Écriture log fichier + historique écran
-└── main.py         ← Point d’entrée — argparse + init + boucle
+  config.json        ← tous les paramètres (source de vérité)
+  config.py          ← lit config.json et expose les constantes
+  logique.py         ← creer_*() + toutes les règles du jeu
+  affichage.py       ← rendu console (grille, tableaux, log)
+  console.py         ← boucle de jeu, 2 joueurs
+  logger.py          ← partie.log + resultats.txt
+  main.py            ← point d'entrée : initialise et lance la boucle
 ```
 
-## Graphe des dépendances
+---
+
+## 2. Graphe des dépendances
 
 ```
 main.py
-  └── config.py          ← patché par argparse en premier
   └── console.py
-        ├── affichage.py
-        │     └── modeles.py
         ├── logique.py
-        │     ├── modeles.py
+        │     └── config.py  ← lit config.json
+        ├── affichage.py
         │     └── config.py
         └── logger.py
-              └── config.py
 ```
 
-**Règle d’or** : aucun fichier ne doit importer `console.py` ou `main.py` — ce sont les feuilles du graphe.
+**Règle d'or** : `main.py` et `console.py` peuvent importer les autres,
+mais les autres ne doivent jamais importer `console.py` ou `main.py`.
+Cela évite les dépendances circulaires.
 
-## Ordre d’intégration recommandé
+---
 
-1. **`config.py`** — aucune dépendance
-2. **`modeles.py`** — classes pures, dépend de `config.py`
-3. **`affichage.py`** — utilise les modèles
-4. **`logique.py`** — règles, utilise modèles + config
-5. **`logger.py`** — entrée/sortie fichier
-6. **`console.py`** — assemble tout
-7. **`main.py`** — point d’entrée final
+## 3. Ordre d'intégration recommandé
 
-## Lancer le jeu
+1. `config.json` + `config.py` — aucune dépendance, base de tout
+2. `logique.py` — uniquement les fonctions `creer_*()` et l'initialisation
+3. `affichage.py` — tester `render_grille()` avec une grille vide
+4. `logger.py` — tester `demarrer_log()` + `enregistrer_log()`
+5. `console.py` — tester la saisie d'une position
+6. `main.py` — assembler et tester le tout
+
+---
+
+## 4. Lancer le jeu
 
 ```bash
 cd jeu
 python main.py
 ```
 
-### Options de lancement (implémentées avec `argparse`)
+Le jeu se lance, affiche la grille et attend la saisie du joueur J1.
 
-```bash
-python main.py --seed 42           # partie reproductible (même seed = même partie)
-python main.py --grille 15         # grille 15×15 (min 6, max 26)
-python main.py --drones 4          # 4 drones au lieu de 6 (1 à 9)
-python main.py --log partie.log    # chemin du fichier journal
+---
 
-# Combinaisons possibles
-python main.py --seed 42 --grille 8 --drones 3
+## 5. Flux d'un tour complet
+
+```
+┌───────────────────────────────────────────────┐
+│ Tour N                                          │
+│   ├── J1 : déplace jusqu'à 3 drones             │
+│   │     pour chaque drone :                    │
+│   │       parser_cible() → saisie joueur        │
+│   │       valider_mouvement()                   │
+│   │       executer_mouvement()                  │
+│   │       enregistrer_log()                     │
+│   ├── J2 : déplace jusqu'à 2 tempêtes           │
+│   └── Auto : tempêtes restantes (50%)           │
+│         + propagation zones X                  │
+│         + verifier_fin_partie()                 │
+│         + afficher_jeu()                        │
+└───────────────────────────────────────────────┘
 ```
 
-Ces options surchargent les constantes de `config.py` au lancement. La valeur par défaut de chaque option est la valeur de `config.py`.
+---
 
-### Comment fonctionne le patch argparse
+## 6. Checklist de rendu étudiant
 
-```python
-# Dans main.py (simplifié)
-args = parse_args()           # lit sys.argv
-config.GRILLE_TAILLE = args.grille   # surcharge la constante
-config.NB_DRONES     = args.drones   # tous les modules qui importent config
-config.LOG_FICHIER   = args.log      # verront la nouvelle valeur
-if args.seed is not None:
-    random.seed(args.seed)           # fixe l'aléatoire AVANT initialiser_partie()
-```
-
-## Checklist de rendu étudiant
-
-- [ ] Le jeu se lance avec `python main.py` sans erreur
-- [ ] La grille s’affiche correctement (12×12 par défaut)
-- [ ] Les drones sont pilotables (D1..D6, coordonnées, ok, next)
-- [ ] Les tempêtes se déplacent automatiquement chaque tour
-- [ ] Le fichier `.log` est créé et lisible
-- [ ] L’historique des 10 dernières lignes est visible dans l’interface
+- [ ] Le jeu se lance avec `python main.py` depuis `jeu/` sans erreur
+- [ ] La grille s'affiche correctement (taille selon `config.json`)
+- [ ] J1 peut déplacer 3 drones par tour (commande type `D1` puis `B3`)
+- [ ] J2 peut déplacer 2 tempêtes par tour
+- [ ] Les tempêtes restantes bougent automatiquement (50%)
+- [ ] Le fichier `partie.log` est créé et lisible
+- [ ] Le fichier `resultats.txt` est créé en fin de partie
+- [ ] Les règles de batterie sont respectées (−1, −2 transport, −2 zone X, +3 hôpital)
 - [ ] La fin de partie (victoire ou défaite) est détectée et affichée
-- [ ] `--seed 42` produit la même partie à chaque lancement
-- [ ] `--grille N` change effectivement la taille de la grille
-- [ ] `--drones N` change effectivement le nombre de drones
+- [ ] Les zones X se propagent tous les 3 tours
 
-## Étendre le jeu (idées bonus)
+---
 
-- Mode 2 joueurs (alternance des tours)
-- Obstacles dynamiques (nouvelles tempêtes qui apparaissent)
-- IA pour les drones non pilotés
-- Sauvegarde et reprise de partie (JSON)
-- Système de scoring avec classement
+## 7. Pistes d'amélioration (bonus)
 
-## Prompts IA
+- Sauvegarder et reprendre une partie (`json.dump` / `json.load`)
+- Ajouter un mode IA pour les drones non pilotés
+- Afficher un historique des 10 derniers événements dans l'interface
+- Ajouter une gestion des scores entre plusieurs parties
 
-> *« Comment organiser un projet Python en plusieurs fichiers qui s’importent entre eux sans créer de dépendances circulaires ? »*
+---
 
-> *« Comment ajouter des arguments en ligne de commande à un script Python avec argparse ? »*
+## Prompts IA utiles
 
-> *« Comment sauvegarder l’état d’un jeu Python dans un fichier JSON pour pouvoir le reprendre plus tard ? »*
+> *« Comment organiser un projet Python en plusieurs fichiers sans dépendances circulaires ? »*
+
+> *« Comment sauvegarder l'état d'un jeu Python dans un fichier JSON pour le reprendre plus tard ? »*
+
+> *« Comment tester chaque module Python séparément avant d'assembler le projet complet ? »*

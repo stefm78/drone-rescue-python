@@ -1,164 +1,295 @@
-# Module 04 — Modules et I/O fichiers
+# Module 04 — Modules, I/O fichiers et JSON
 
-## Concepts couverts
+> **Fil rouge :** `config.py` lit `config.json` au démarrage, `logger.py` écrit
+> `partie.log` et `resultats.txt`. À la fin de ce module, tu sauras importer
+> des modules, lire/écrire des fichiers texte et charger un fichier JSON.
 
-- `import` — bibliothèques standard
-- `random` : `choice`, `randint`, `sample`, `random`, `seed`
-- Lecture/écriture de fichiers : `open()`, `with`, modes `'r'`, `'w'`, `'a'`
-- `pathlib.Path` pour les chemins portables
-- `try/except` pour les fichiers manquants
-- `json` : sérialiser/désérialiser un état de jeu
-- Créer ses propres modules importables
+---
 
-## Lien avec le projet
+## 1. Importer un module
+
+Python fournit de nombreuses bibliothèques prêtes à l'emploi :
+
+```python
+import random     # génération aléatoire
+import json       # lire/écrire du JSON
+import os         # interaction avec le système d'exploitation
+```
+
+On peut aussi n'importer qu'une fonction spécifique :
+
+```python
+from random import choice, randint, sample
+```
+
+Dans le jeu, `random` est utilisé pour le placement initial et la phase météo :
 
 ```python
 import random
-from pathlib import Path
 
-# Convention : colonne str 'A'..'L', ligne int 1-based
-def placer_entites(nb: int, cases_libres: list, seed=None) -> list:
-    """
-    Choisit nb positions aléatoires uniques parmi cases_libres.
-    cases_libres : liste de tuples (colonne: str, ligne: int)
-    Retourne la liste des (colonne, ligne) choisis.
-    """
-    if seed is not None:
-        random.seed(seed)
-    return random.sample(cases_libres, nb)
+# Placer des entités aléatoirement
+positions = random.sample(cases_libres, nb_drones)
 
+# Phase météo : la tempête bouge avec 50% de chance
+if random.random() > 0.5:
+    deplacer_tempete(tempete)
+```
 
-# Écriture du log (mode 'a' = append — on ne perd pas l'historique)
-def ecrire_log(message: str, chemin_log: Path) -> None:
-    """Ajoute une ligne à la fin du fichier log."""
-    with open(chemin_log, 'a', encoding='utf-8') as f:
-        f.write(message + '\n')
+> 💡 `random.seed(42)` fixe l'aléatoire : même seed = même partie. Utile pour tester.
 
+---
 
-# Lire les N dernières lignes avec gestion d'absence de fichier
-def lire_dernieres_lignes(chemin_log: Path, n: int = 10) -> list:
-    """Retourne les n dernières lignes du fichier log."""
+## 2. Lire et écrire des fichiers texte
+
+### Ouvrir avec `with open()`
+
+```python
+# Écrire (crée ou écrase)
+with open("partie.log", "w", encoding="utf-8") as f:
+    f.write("=== Début de partie ===\n")
+
+# Ajouter à la fin (append)
+with open("partie.log", "a", encoding="utf-8") as f:
+    f.write("T01  D1  A0→B0  bat:10→8\n")
+
+# Lire tout le contenu
+with open("partie.log", "r", encoding="utf-8") as f:
+    contenu = f.read()
+```
+
+`with ... as f` garantit que le fichier est fermé même si une erreur survient.
+C'est la façon standard — ne jamais utiliser `f = open(...)` sans `with`.
+
+### Les 3 modes essentiels
+
+| Mode | Signification | Utilisation |
+|------|--------------|-------------|
+| `"w"` | write — écrase | Démarrer un log, écrire les résultats |
+| `"a"` | append — ajoute | Chaque événement de jeu |
+| `"r"` | read — lit | Relire un log, charger une config |
+
+---
+
+## 3. Lire un fichier JSON
+
+Le fichier `config.json` contient tous les paramètres du jeu :
+
+```json
+{
+  "GRILLE_TAILLE": 8,
+  "NB_DRONES": 6,
+  "BATTERIE_MAX": 20,
+  "HOPITAL_COL": 0,
+  "HOPITAL_LIG": 7
+}
+```
+
+Pour le lire en Python :
+
+```python
+import json
+
+def charger_config(chemin="config.json"):
+    """Lit le fichier JSON et retourne un dictionnaire."""
+    with open(chemin, "r", encoding="utf-8") as f:
+        return json.load(f)   # retourne un dict Python
+
+config = charger_config()
+print(config["GRILLE_TAILLE"])   # 8
+print(config["NB_DRONES"])       # 6
+```
+
+- `json.load(f)` : lit le fichier et convertit automatiquement en `dict` Python
+- Les clés JSON deviennent des clés de dictionnaire
+- Les `true`/`false` JSON deviennent `True`/`False` Python
+- Les `null` JSON deviennent `None` Python
+
+> 💡 `json.load(f)` = lire depuis un fichier ouvert. `json.loads(chaine)` = lire depuis une chaîne.
+
+---
+
+## 4. Gérer les fichiers absents avec `try/except`
+
+Si le fichier `config.json` n'existe pas, Python lève une `FileNotFoundError`.
+On la capture avec `try/except` :
+
+```python
+def charger_config(chemin="config.json"):
     try:
-        with open(chemin_log, 'r', encoding='utf-8') as f:
-            lignes = f.readlines()
-        return [l.rstrip('\n') for l in lignes[-n:]]
-    except FileNotFoundError:
-        return []   # fichier pas encore créé : normal au 1er tour
-
-
-# Sérialiser l'état pour sauvegarde
-def sauvegarder_etat(etat: dict, chemin: Path) -> None:
-    import json
-    with open(chemin, 'w', encoding='utf-8') as f:
-        json.dump(etat, f, indent=2, ensure_ascii=False)
-
-
-def charger_etat(chemin: Path) -> dict:
-    import json
-    try:
-        with open(chemin, 'r', encoding='utf-8') as f:
+        with open(chemin, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
-        return {}
+        print(f"Fichier '{chemin}' introuvable.")
+        return {}   # config vide par défaut
 ```
+
+Ici, `except FileNotFoundError` ne capture que ce type d'erreur précis.
+C'est une bonne pratique : ne pas capturer toutes les erreurs en même temps.
+
+---
+
+## 5. Créer ses propres modules (#51)
+
+Un module Python, c'est simplement un fichier `.py` que tu importes depuis un autre.
+
+### Questions à se poser avant de créer un nouveau fichier
+
+1. **Est-ce un groupe de fonctions liées ?** (ex: toutes les fonctions de logique)
+2. **D'autres fichiers en ont-ils besoin ?** (ex: `affichage.py` a besoin de `logique.py`)
+3. **Est-ce réutilisable indépendamment ?** (ex: `logger.py` peut fonctionner seul)
+
+Si oui à au moins deux : c'est un bon candidat pour un module séparé.
+
+```
+jeu/
+  config.py    ← lit config.json
+  logique.py   ← règles du jeu
+  affichage.py ← rendu console
+  console.py   ← saisie joueur
+  logger.py    ← écriture fichiers
+  main.py      ← point d'entrée
+```
+
+```python
+# Dans console.py
+from logique import valider_mouvement, executer_mouvement
+from affichage import afficher_jeu
+from logger import enregistrer_log
+```
+
+**Règle d'or** : `main.py` et `console.py` peuvent importer les autres,
+mais les autres ne doivent jamais importer `console.py` ou `main.py`.
+Cela évite les dépendances circulaires.
+
+---
+
+## 6. `if __name__ == '__main__'` (#50)
+
+Cette ligne permet d'exécuter du code uniquement quand le fichier est
+**lancé directement**, pas quand il est importé.
+
+```python
+# logique.py
+
+def distance_chebyshev(col1, lig1, col2, lig2):
+    return max(abs(col2 - col1), abs(lig2 - lig1))
+
+# Ce bloc ne s'exécute QUE si on fait : python logique.py
+if __name__ == '__main__':
+    print(distance_chebyshev(0, 0, 1, 1))   # test rapide : affiche 1
+```
+
+Quand `console.py` fait `from logique import distance_chebyshev`,
+le bloc `if __name__ == '__main__'` n'est **pas** exécuté.
+
+Utilisations courantes :
+- Tests rapides d'un module seul
+- Point d'entrée de `main.py`
+
+---
+
+## 7. Exercice A — Lire une config JSON
+
+```python
+# Crée un fichier config_test.json avec ce contenu :
+# {"taille": 8, "nb_drones": 3, "batterie_max": 20}
+
+import json
+
+with open("config_test.json", "r", encoding="utf-8") as f:
+    config = json.load(f)
+
+print(config["taille"])       # 8
+print(config["nb_drones"])    # 3
+print(config["batterie_max"]) # 20
+```
+
+---
+
+## 8. Exercice B — Écrire et lire un log
+
+```python
+# Étapes :
+# 1. Créer le fichier log avec l'en-tête
+# 2. Ajouter 3 lignes d'événements
+# 3. Lire et afficher le contenu
+
+with open("test.log", "w", encoding="utf-8") as f:
+    f.write("=== Journal de test ===\n")
+
+for i in range(1, 4):
+    with open("test.log", "a", encoding="utf-8") as f:
+        f.write(f"T0{i}  événement {i}\n")
+
+with open("test.log", "r", encoding="utf-8") as f:
+    print(f.read())
+```
+
+---
 
 ## Erreurs classiques
 
 **Erreur 1 — Oublier `with` → fichier non fermé**
 ```python
-# ❌ Si une exception survient, le fichier reste ouvert
-f = open('partie.log', 'w')
-f.write('Tour 1')   # si ça plante ici, le fichier n'est jamais fermé
-f.close()
+# ❌ Si une erreur survient, le fichier reste bloqué
+f = open("partie.log", "w")
+f.write("Tour 1")
+f.close()   # peut ne jamais être appelé si exception
 
-# ✅ with garantit la fermeture même en cas d'erreur
-with open('partie.log', 'w', encoding='utf-8') as f:
-    f.write('Tour 1')
+# ✅
+with open("partie.log", "w", encoding="utf-8") as f:
+    f.write("Tour 1")
 ```
 
-**Erreur 2 — `FileNotFoundError` sur un fichier absent**
+**Erreur 2 — Mode `"w"` au lieu de `"a"` pour un log**
 ```python
-# ❌ Plante si le fichier n'existe pas encore
-with open('partie.log', 'r') as f:
-    data = f.read()   # FileNotFoundError !
+# ❌ Écrase tout à chaque événement
+with open("partie.log", "w") as f:
+    f.write(f"T{tour}\n")
 
-# ✅ Gérer l'absence explicitement
+# ✅ Ajoute en fin de fichier
+with open("partie.log", "a", encoding="utf-8") as f:
+    f.write(f"T{tour}\n")
+```
+
+**Erreur 3 — `FileNotFoundError` non gérée**
+```python
+# ❌ Plante si le fichier n'existe pas
+with open("config.json", "r") as f:
+    config = json.load(f)
+
+# ✅
 try:
-    with open('partie.log', 'r', encoding='utf-8') as f:
-        data = f.read()
+    with open("config.json", "r", encoding="utf-8") as f:
+        config = json.load(f)
 except FileNotFoundError:
-    data = ''   # log vide = début de partie
+    config = {}   # valeurs par défaut
 ```
 
-**Erreur 3 — Mode `'w'` efface le fichier existant**
-```python
-# ❌ Écrase tout l'historique à chaque tour !
-with open('partie.log', 'w') as f:
-    f.write(f'Tour {tour}')
+---
 
-# ✅ Mode 'a' (append) préserve l'historique
-with open('partie.log', 'a', encoding='utf-8') as f:
-    f.write(f'Tour {tour}\n')
-```
+## Résumé des points clés
 
-**Erreur 4 — `random.sample` avec n > len(population)**
-```python
-# ❌ ValueError si on demande plus de cases qu'il n'y en a de libres
-positions = random.sample(cases_libres, 20)  # si len(cases_libres) < 20
+| Concept | Exemple | À retenir |
+|---------|---------|----------|
+| Importer | `import json` | En haut du fichier |
+| Lire JSON | `json.load(f)` | Retourne un dict |
+| Écrire fichier | `open("f", "w")` | Écrase |
+| Ajouter | `open("f", "a")` | Préserve |
+| Fichier absent | `except FileNotFoundError` | Toujours gérer |
+| Module séparé | `from logique import f` | Import ciblé |
+| Test d'un module | `if __name__ == '__main__'` | Pas exécuté à l'import |
 
-# ✅ Vérifier avant
-assert nb <= len(cases_libres), f'Pas assez de cases libres ({len(cases_libres)} < {nb})'
-positions = random.sample(cases_libres, nb)
-```
-
-## Exercice de compréhension
-
-**Q1.** Quelle différence entre les modes `'w'` et `'a'` ?
-<details><summary>Réponse</summary>
-
-`'w'` (write) crée ou **écrase** le fichier. `'a'` (append) crée si absent, sinon **ajoute** à la fin. Pour un log de partie, toujours utiliser `'a'`.
-</details>
-
-**Q2.** Pourquoi utiliser `random.seed(42)` dans les tests ?
-<details><summary>Réponse</summary>
-
-Cela fixe le générateur aléatoire : même seed = même séquence de nombres. Les tests sont donc reproductibles et prédictibles.
-</details>
-
-**Q3.** Que se passe-t-il si on fait `json.dump(etat, f)` avec `etat` contenant un objet Python (ex. une instance de `Drone`) ?
-<details><summary>Réponse</summary>
-
-`TypeError: Object of type Drone is not JSON serializable`. JSON ne gère que les types de base : `dict`, `list`, `str`, `int`, `float`, `bool`, `None`. Il faut d'abord convertir en dict.
-</details>
+---
 
 ## Exercices du module
 
 Voir `exercices/ex_04_io.py`
 
-## Tips et best practices
+## Prompts IA utiles
 
-- **Toujours utiliser `with open(...):`** — fermeture automatique même en cas d'erreur.
-- **`'a'` pour les logs**, `'w'` pour réécrire, `'r'` pour lire.
-- **`pathlib.Path` plutôt que les chaînes** — portable Windows/Linux/Mac :
-  ```python
-  from pathlib import Path
-  LOG = Path('parties') / 'partie_01.log'
-  LOG.parent.mkdir(exist_ok=True)  # crée le dossier si absent
-  ```
-- **`try/except FileNotFoundError`** sur toute lecture de fichier optionnel.
-- **`random.seed()` pour les tests reproductibles**.
+> *« Comment lire un fichier JSON en Python et accéder à ses valeurs ? »*
 
-## Références
+> *« Quelle est la différence entre les modes `'w'` et `'a'` dans `open()` en Python ? »*
 
-- [Docs Python — random](https://docs.python.org/fr/3/library/random.html)
-- [Docs Python — pathlib](https://docs.python.org/fr/3/library/pathlib.html)
-- [Real Python — Working With Files in Python](https://realpython.com/working-with-files-in-python/)
-- [Real Python — Python import system](https://realpython.com/python-import/)
-
-## Prompts IA
-
-> *« Comment utiliser random.seed() pour rendre mes tests Python reproductibles ? »*
-
-> *« Explique-moi la différence entre les modes open() en Python : r, w, a, r+, x. »*
-
-> *« Comment utiliser pathlib en Python pour manipuler des chemins de fichiers de façon portable ? »*
+> *« À quoi sert `if __name__ == '__main__'` en Python ? »*
