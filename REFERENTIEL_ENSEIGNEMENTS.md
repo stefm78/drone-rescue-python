@@ -1,242 +1,238 @@
 # Référentiel des enseignements Python — Drone Rescue
 
-> **Objectif de ce fichier**  
+> **Objectif de ce fichier**
 > Lister tous les concepts Python qu'un apprenant débutant doit maîtriser
-> pour être capable de lire, comprendre et écrire le code du jeu Drone Rescue.  
-> Ce référentiel sert de grille de vérification : chaque entrée doit correspondre
-> à un (ou plusieurs) module(s) du cours.
+> pour lire, comprendre et écrire le code du jeu Drone Rescue.
+> Ce référentiel sert de grille de vérification : chaque entrée correspond
+> à un (ou plusieurs) module(s) de cours.
+>
+> **Mise à jour 2026-03-30** : refonte complète. La POO est retirée du jeu.
+> `modeles.py` est supprimé. Toutes les entités sont des **dictionnaires**.
+> Les règles officielles sont alignées sur `Projet_Drones_G4.pdf`.
 
 ---
 
 ## Comment utiliser ce fichier
 
-Chaque entrée est structurée ainsi :
-
 ```
-- [ ] Concept  — où il apparaît dans le jeu (fichier, ligne représentative)
+- [x] Concept  — où il apparaît dans le jeu (fichier, fonction)
 ```
 
-Une case cochée `[x]` indiquera qu'un module de cours couvre ce concept.
+Case cochée = couvert par un module de cours.
 
 ---
 
 ## Module 1 — Fondamentaux du langage
+### Cours : `01_structures_de_base.md`
 
 ### 1.1 Variables et types de base
-- [ ] Déclaration et affectation de variables — `config.py` (GRILLE_TAILLE = 12)
-- [ ] Types entiers (`int`) — `config.py` (NB_DRONES, BATTERIE_MAX…)
-- [ ] Types flottants (`float`) — `config.py` (PROBA_PROPAGATION = 0.3)
-- [ ] Chaînes de caractères (`str`) — `modeles.py` (etat = "en_attente")
-- [ ] Booléens (`bool`) — `modeles.py` (hors_service = False)
-- [ ] La valeur `None` — `modeles.py` (survivant = None)
-- [ ] Constantes de module (convention MAJUSCULES) — `config.py`
+- [x] Déclaration et affectation — `logique.py` (`batterie = 10`)
+- [x] Types `int`, `float`, `str`, `bool` — `config.json` (toutes les constantes)
+- [x] La valeur `None` — `logique.py` (`survivant: None` dans `creer_drone()`)
+- [x] Constantes en MAJUSCULES (lecture depuis JSON) — `config.py`
 
 ### 1.2 Opérateurs
-- [ ] Opérateurs arithmétiques (`+`, `-`, `*`, `/`, `//`, `%`) — `logique.py` (batterie -= nb)
-- [ ] Opérateurs de comparaison (`==`, `!=`, `<`, `<=`, `>`, `>=`) — `logique.py` (valider_mouvement)
-- [ ] Opérateurs logiques (`and`, `or`, `not`) — `logique.py` (valider_mouvement_tempete)
-- [ ] Opérateur `in` / `not in` — `logique.py` (pos not in interdit)
-- [ ] Opérateur de walrus `:=` (optionnel, niveau avancé)
+- [x] Arithmétiques (`+`, `-`, `*`, `//`, `%`) — `logique.py` (coûts batterie)
+- [x] Comparaison (`==`, `!=`, `<`, `<=`, `>`, `>=`) — `logique.py` (`valider_mouvement`)
+- [x] Logiques (`and`, `or`, `not`) — `logique.py` (conditions combinées)
+- [x] `in` / `not in` — `logique.py` (`if cible in etat["zones_x"]`)
+- [x] `max()`, `abs()` — `logique.py` (`distance_chebyshev`, `max(0, bat - cout)`)
 
-### 1.3 Chaînes de caractères — opérations courantes
-- [ ] Concaténation et f-strings — `modeles.py` (`__repr__`, `__str__`)
-- [ ] Méthodes `.strip()`, `.upper()`, `.lower()` — `console.py` (parser_commande)
-- [ ] Méthode `.isdigit()`, `.isalpha()` — `console.py` (parser_commande)
-- [ ] Indexation d'une chaîne (`texte[0]`, `texte[1:]`) — `modeles.py` (depuis_chaine)
-- [ ] `len()` sur une chaîne — `modeles.py` (depuis_chaine : `if len(texte) < 2`)
-- [ ] `.index()` sur une liste/chaîne — `modeles.py` (LETTRES.index(lettre))
-- [ ] Formatage avec `.rjust()`, `:<N`, `:>N`, `:02d` — `affichage.py`, `logique.py`
+### 1.3 Chaînes de caractères
+- [x] F-strings — `affichage.py`, `logger.py` (tout le formatage)
+- [x] `.strip()`, `.upper()`, `.lower()` — `console.py` (normalisation saisie)
+- [x] Indexation `texte[0]`, `texte[1:]` — `logique.py` (`position_depuis_chaine`)
+- [x] `len()` — `logique.py` (`if len(texte) < 2`)
+- [x] `.index()` sur une liste — `logique.py` (`LETTRES.index(lettre)`)
+- [x] Formatage aligné `rjust()`, `ljust()`, `:<N`, `:>N`, `:02d` — `affichage.py`
 
 ---
 
 ## Module 2 — Structures de contrôle
+### Cours : `02_boucles_et_conditions.md`
 
 ### 2.1 Conditions
-- [ ] `if` / `elif` / `else` — `console.py` (parser_commande, phase_drones)
-- [ ] Conditions imbriquées — `logique.py` (executer_mouvement)
-- [ ] Expression ternaire `valeur_si_vrai if condition else valeur_si_faux` — `affichage.py`
+- [x] `if` / `elif` / `else` — `logique.py` (`valider_mouvement`, `executer_mouvement`)
+- [x] Conditions imbriquées — `logique.py` (livraison + recharge simultanées)
 
 ### 2.2 Boucles
-- [ ] Boucle `for` sur un itérable — `logique.py` (for i in range(NB_DRONES))
-- [ ] Boucle `for` avec `range()` — `logique.py` (_mettre_a_jour_grille)
-- [ ] Boucle `while` — `console.py` (while deplacements_restants > 0)
-- [ ] Instructions `break` et `continue` — `console.py` (phase_drones)
-- [ ] Boucle `for` avec `enumerate()` — non utilisé dans le jeu, mais utile à enseigner
+- [x] `for` sur un itérable — `logique.py` (`for drone in etat["drones"].values()`)
+- [x] `for` avec `range()` — `logique.py` (initialisation de la grille)
+- [x] `while` — `console.py` (`while nb_depl < MAX`)
+- [x] `break` et `continue` — `console.py` (boucle de saisie)
+- [x] `all()` sur un itérable — `logique.py` (`verifier_fin_partie`)
 
 ### 2.3 Gestion des erreurs
-- [ ] `try` / `except` — `modeles.py` (depuis_chaine : try int(texte[1:]))
-- [ ] Exceptions spécifiques (`ValueError`, `OSError`, `KeyboardInterrupt`, `EOFError`) — `logger.py`, `console.py`
-- [ ] Bloc `finally` (à enseigner même si peu présent dans le jeu)
+- [x] `try` / `except ValueError` — `logique.py` (`position_depuis_chaine : int(texte[1:])`)
+- [x] `except FileNotFoundError` — `config.py` (lecture `config.json`)
+- [ ] Bloc `finally` (concept à enseigner, peu présent dans le jeu)
 
 ---
 
 ## Module 3 — Fonctions
+### Cours : `03_fonctions.md`
 
-### 3.1 Définir et appeler une fonction
-- [ ] Définition avec `def` — tous les fichiers
-- [ ] Paramètres positionnels — `logique.py` (valider_mouvement)
-- [ ] Paramètres avec valeur par défaut — `logique.py` (_position_aleatoire, max_tentatives=200)
-- [ ] Valeur de retour `return` — `logique.py` (valider_mouvement → tuple)
-- [ ] Retour de plusieurs valeurs (tuple) — `logique.py` (return False, "raison")
-- [ ] Fonctions sans retour explicite (retournent `None`) — `logique.py` (appliquer_blocages)
+### 3.1 Définir et appeler
+- [x] `def`, paramètres positionnels, `return` — tous les fichiers
+- [x] Paramètres avec valeur par défaut — `logique.py` (`creer_drone(batterie=10)`)
+- [x] Retour de plusieurs valeurs (tuple) — `logique.py` (`return False, "raison"`)
+- [x] Déstructuration `ok, msg = f()` — `console.py`
+- [x] Fonctions sans `return` explicite (retournent `None`) — `logger.py`
 
-### 3.2 Portée des variables
-- [ ] Variable locale vs globale — `logger.py` (`global _fichier_ouvert`)
-- [ ] Mot-clé `global` — `logger.py` (_ecrire_fichier)
+### 3.2 Robustesse
+- [x] `try/except ValueError` sur saisie — `logique.py` (`position_depuis_chaine`)
+- [x] Valeur par défaut mutable dangereuse : utiliser `None` comme sentinelle — cours 03
+- [x] Docstrings — tous les fichiers
 
-### 3.3 Fonctions avancées
-- [ ] Fonctions imbriquées (closures légères) — `logique.py` (def _cible_libre(pos) dans deplacer_tempetes)
-- [ ] Annotations de type (`-> bool`, `-> str`, `: int`) — `modeles.py`, `logique.py`
-- [ ] Chaîne de documentation `docstring` — tous les fichiers
+### 3.3 Fonctions de création (pattern dict-factory)
+- [x] `creer_drone(id, col, lig)` → dict — `logique.py`
+- [x] `creer_survivant(id, col, lig)` → dict — `logique.py`
+- [x] `creer_tempete(id, col, lig)` → dict — `logique.py`
 
 ---
 
 ## Module 4 — Structures de données
+### Cours : `01_structures_de_base.md` + `05_dictionnaires_avances.md`
 
 ### 4.1 Listes
-- [ ] Création et accès par index — `modeles.py` (LETTRES, cases)
-- [ ] List comprehension — `modeles.py` (voisins_ortho, cases = [['.' for _ …] for _ …])
-- [ ] `.append()` — `logique.py` (etat.batiments.append(bat))
-- [ ] `len()` — `affichage.py` (len(col1))
-- [ ] Itération sur une liste — `logique.py` (for drone in etat.drones)
-- [ ] Slicing (`liste[-n:]`) — `affichage.py` (historique[-(max(1, nb_lignes - 1)):])
-- [ ] `list()` appliqué à un itérable — `modeles.py` (list("ABCDEFGHIJKL"))
+- [x] Création, accès par index — `logique.py` (`LETTRES`, cases libres)
+- [x] List comprehension simple — `logique.py` (`cases_libres = [c for c in toutes if ...]`)
+- [x] List comprehension avec condition — `logique.py`
+- [x] `.append()` — `affichage.py` (construction des lignes d'affichage)
+- [x] `len()`, `range()` — partout
+- [x] Copie pour itération sûre `list(etat["zones_x"])` — `logique.py` (`propager_zones_x`)
+- [x] Grille 2D = liste de listes, `grille[lig][col]` — `logique.py`, `affichage.py`
 
 ### 4.2 Tuples
-- [ ] Création et déballage (`dc, dl = tempete.direction`) — `logique.py`
-- [ ] Tuple comme valeur de retour — `logique.py` (return True, "")
-- [ ] Tuple comme clé de `set` ou `dict` — `modeles.py` (`__hash__` : hash((col, lig)))
+- [x] Création `(col, lig)` et déballage `col, lig = pos` — partout
+- [x] Tuple comme valeur de retour — `logique.py` (`return True, ""`)
+- [x] Tuple immuable : clé de set — `logique.py` (positions dans `zones_x`)
+- [x] `(col, lig) == etat["hopital"]` — `logique.py`
 
 ### 4.3 Dictionnaires
-- [ ] Création avec `{}` — `affichage.py` (_C = { 'D': '\033[94m', … })
-- [ ] Accès à une valeur (`dict[cle]`) — `affichage.py` (_C.get(sym, ''))
-- [ ] Méthode `.get()` avec valeur par défaut — `affichage.py`
-- [ ] Itération sur un dictionnaire — `console.py` (drones_bouge = {d.identifiant: False …})
+- [x] Création `{"clé": valeur}` — `logique.py` (`creer_drone`)
+- [x] Accès `drone["batterie"]` — partout
+- [x] Modification `drone["batterie"] -= 1` — `logique.py`
+- [x] `.get(cle, defaut)` — `logique.py`
+- [x] `in` sur les clés — `console.py` (`if saisie in etat["drones"]`)
+- [x] `.items()`, `.values()`, `.keys()` — partout
+- [x] Dict de dicts `etat["drones"]["D1"]["batterie"]` — `logique.py`, `console.py`
+- [x] Dict global `etat` comme paramètre unique — toutes les fonctions de `logique.py`
 
 ### 4.4 Ensembles (sets)
-- [ ] Création avec `set()` — `logique.py` (occupees: set = set())
-- [ ] Opérateur `|` (union) — `logique.py` (interdit = (interdites or set()) | occupees)
-- [ ] `.add()` — `logique.py` (etat.zones_x.add(pos))
-- [ ] Test d'appartenance avec `in` — `logique.py` (if pos not in interdit)
-- [ ] Itération sur un set — `logique.py` (for zone_x in list(etat.zones_x))
+- [x] Création `set()` — `logique.py` (`zones_x`, positions occupées)
+- [x] `.add()` — `logique.py` (`propager_zones_x`)
+- [x] `.discard()` — `logique.py`
+- [x] Test `in` — `logique.py` (`if cible in etat["zones_x"]`)
+- [x] Itération sur copie `list(s)` — `logique.py`
+- [x] Éléments immuables (tuples) obligatoires — cours 05
 
 ---
 
-## Module 5 — Programmation Orientée Objet (POO)
+## Module 5 — Dictionnaires avancés et sets
+### Cours : `05_dictionnaires_avances.md`
 
-### 5.1 Classes et instances
-- [ ] Définition d'une classe avec `class` — `modeles.py` (class Position, Drone, etc.)
-- [ ] Constructeur `__init__` — `modeles.py` (toutes les classes)
-- [ ] Attributs d'instance (`self.x`) — `modeles.py`
-- [ ] Attributs de classe (partagés) — `modeles.py` (Position.LETTRES, Tempete._DIRECTIONS)
-- [ ] Méthodes d'instance — `modeles.py` (est_actif, consommer_batterie…)
+> La POO (classes) a été **retirée du jeu**. Le module 05 couvre les dicts
+> avancés et les sets à la place. La POO est mentionnée en "pour aller plus loin".
 
-### 5.2 Méthodes spéciales (dunder methods)
-- [ ] `__str__` — `modeles.py` (Position.__str__)
-- [ ] `__repr__` — `modeles.py` (Position.__repr__, Drone.__repr__)
-- [ ] `__eq__` — `modeles.py` (Position.__eq__)
-- [ ] `__hash__` — `modeles.py` (Position.__hash__)
-
-### 5.3 Méthodes de classe
-- [ ] `@classmethod` et `cls` — `modeles.py` (Position.depuis_chaine)
-
-### 5.4 Héritage et isinstance
-- [ ] `isinstance()` — `modeles.py` (Position.__eq__ : if not isinstance(autre, Position))
-- [ ] Héritage (notion, même si le jeu n'en fait pas un usage extensif)
-
-### 5.5 Annotations de type en POO
-- [ ] Annotation de type pour les paramètres de méthode — `modeles.py` (def __init__(self, col: int, lig: int))
-- [ ] Références circulaires dans les annotations (`"Position"` entre guillemets) — `modeles.py` (distance_chebyshev)
-- [ ] Union de types (`Drone | None`) — `modeles.py`, `logique.py`
+- [x] Dict de dicts : structure `etat["drones"]["D1"]` — `logique.py`
+- [x] Fonctions factory `creer_drone()` — `logique.py`
+- [x] Sets de tuples pour positions — `logique.py` (`zones_x`, `occupees`)
+- [x] Dict `etat` global passé en paramètre — toutes les fonctions
+- [ ] POO : `class`, `__init__`, méthodes — **mention "pour aller plus loin" uniquement**
 
 ---
 
-## Module 6 — Modules et organisation du code
+## Module 6 — Modules, I/O, JSON
+### Cours : `04_modules_et_io.md`
 
-### 6.1 Import de modules
-- [ ] `import module` — `main.py` (import random)
-- [ ] `from module import symbole` — tous les fichiers (from modeles import EtatJeu…)
-- [ ] Import dans un bloc conditionnel — `main.py` (if args.seed is not None: import random)
+### 6.1 Imports
+- [x] `import random` — `logique.py` (phase météo, placement initial)
+- [x] `import json` — `config.py` (`charger_config()`)
+- [x] `import os` — `affichage.py` (`effacer_ecran()`)
+- [x] `from module import f` — `console.py` (`from logique import valider_mouvement`)
 
-### 6.2 Modules standards utilisés dans le jeu
-- [ ] `random` : `random.randint()`, `random.choice()`, `random.random()`, `random.seed()` — `logique.py`, `main.py`
-- [ ] `os` : `os.path.dirname()` — `main.py`
-- [ ] `sys` : `sys.path.insert()`, `sys.exit()` — `main.py`
-- [ ] `argparse` : `ArgumentParser`, `add_argument`, `parse_args` — `main.py`
-- [ ] `shutil` : `shutil.get_terminal_size()` — `affichage.py`
-- [ ] `re` : `re.sub()` et expressions régulières (basique) — `affichage.py` (_strip_ansi)
+### 6.2 Fichiers
+- [x] `open()` modes `"r"`, `"w"`, `"a"` — `logger.py`, `config.py`
+- [x] `with open(...) as f` — partout
+- [x] `encoding="utf-8"` — `logger.py`
+- [x] `json.load(f)` — `config.py`
+- [x] `except FileNotFoundError` — `config.py`
+- [x] `if __name__ == '__main__'` — `main.py` + conseil dans tous les modules
 
-### 6.3 Structure d'un projet multi-fichiers
-- [ ] Point d'entrée `if __name__ == '__main__':` — `main.py`
-- [ ] Séparation des responsabilités (config / modèles / logique / affichage / console / logger)
-- [ ] Manipulation du `sys.path` pour les imports locaux — `main.py`
-
----
-
-## Module 7 — Entrées / Sorties
-
-### 7.1 Entrées utilisateur
-- [ ] `input()` — `console.py` (_prompt)
-- [ ] Gestion de `EOFError` et `KeyboardInterrupt` lors d'un `input()` — `console.py`
-
-### 7.2 Affichage console
-- [ ] `print()` et paramètres `end=`, `flush=` — `console.py`, `affichage.py`
-- [ ] Codes d'échappement ANSI (couleurs, effacement écran) — `affichage.py` (_C dict, \033[2J\033[H)
-
-### 7.3 Fichiers
-- [ ] Ouverture d'un fichier avec `open()` en mode écriture — `logger.py`
-- [ ] Encodage `encoding='utf-8'` — `logger.py`
-- [ ] Écriture avec `.write()` et `.flush()` — `logger.py`
-- [ ] Fermeture avec `.close()` — `logger.py` (fermer_log)
-- [ ] Gestionnaire de contexte `with open(...) as f:` — `logger.py` (sauvegarder_log)
-- [ ] Gestion des erreurs disque (`OSError`) — `logger.py`
+### 6.3 Multi-fichiers
+- [x] Séparation des responsabilités : config / logique / affichage / console / logger / main
+- [x] Règle de dépendance : main/console importent les autres, jamais l'inverse
+- [ ] `sys.path` : **retiré du jeu**, non enseigné
+- [ ] `argparse` : **retiré du jeu**, non enseigné
 
 ---
 
-## Module 8 — Algorithmique et logique de jeu
+## Module 7 — Grille et affichage
+### Cours : `06_grille_et_affichage.md` + `annexe_formatage.md`
 
-### 8.1 Algorithmes de base
-- [ ] Recherche dans une liste (boucle + condition de retour) — `modeles.py` (drone_par_id)
-- [ ] Génération de positions aléatoires avec contraintes — `logique.py` (_position_aleatoire)
-- [ ] Distance de Chebyshev (max des différences absolues) — `modeles.py` (distance_chebyshev)
-- [ ] Propagation sur une grille (voisins orthogonaux) — `logique.py` (propager_zones_x)
-- [ ] Rebond sur les bords (IA de déplacement) — `logique.py` (deplacer_tempetes)
-
-### 8.2 Modélisation avec des classes
-- [ ] Représenter un état de jeu complet dans un objet — `modeles.py` (EtatJeu)
-- [ ] Grille 2D modélisée par une liste de listes — `modeles.py` (Grille.cases)
-- [ ] Coordonnées sur une grille (colonne / ligne, indexation 0-based) — `modeles.py` (Position)
-
-### 8.3 Boucle de jeu
-- [ ] Architecture boucle principale + phases — `main.py` / `console.py` (boucle_principale, boucle_saisie)
-- [ ] Séparation de la logique et de l'affichage — `logique.py` vs `affichage.py`
-- [ ] Pattern commande : parser → valider → exécuter — `console.py` (parser_commande + valider_mouvement + executer_mouvement)
+- [x] Grille 2D `grille[lig][col]` — `affichage.py` (`render_grille`)
+- [x] Boucles imbriquées pour construire la grille — `logique.py`
+- [x] `rjust()`, `ljust()`, `:<N`, `:>N`, `:02d` — `affichage.py`
+- [x] Assemblage multi-colonnes (grille | statuts | log) — `affichage.py`
+- [x] Effacer l'écran `os.system('cls'/'clear')` — `affichage.py`
+- [x] Distance de Chebyshev `max(|dc|, |dl|)` — `logique.py`
+- [ ] Codes ANSI : **retirés du jeu**, non enseignés
+- [ ] `re`, `shutil` : **retirés du jeu**, non enseignés
 
 ---
 
-## Module 9 — Bonnes pratiques et style
+## Module 8 — Logique de jeu
+### Cours : `07_logique_de_jeu.md`
 
-- [ ] Convention de nommage PEP 8 (snake_case, MAJUSCULES pour constantes)
-- [ ] Commentaires et docstrings (quand et comment les écrire)
-- [ ] Découpage en fonctions courtes et réutilisables
-- [ ] Variables de configuration centralisées dans un fichier dédié
-- [ ] Eviter les valeurs "magiques" (magic numbers) — remplacer par des constantes nommées
-- [ ] Ne pas dupliquer le code (DRY — Don't Repeat Yourself)
+- [x] Séparation validation / exécution — `logique.py` (`valider_mouvement` + `executer_mouvement`)
+- [x] Règles batterie : −1 / −2 transport / −2 zone X / +3 hôpital — `logique.py`
+- [x] Propagation zones X (set + copie + `random.random()`) — `logique.py`
+- [x] Phase météo : 50% par tempête — `logique.py`
+- [x] `all()` pour `verifier_fin_partie` — `logique.py`
+- [x] Itérer sur copie `list(set)` pour éviter le RuntimeError — `logique.py`
+- [x] `max(0, bat - cout)` pour éviter la batterie négative — `logique.py`
+
+---
+
+## Module 9 — Console, log et assemblage
+### Cours : `08_console_et_log.md` + `09_assemblage_final.md`
+
+- [x] Architecture parser → valider → exécuter — `console.py`
+- [x] `input()` + `.strip().upper()` — `console.py`
+- [x] `position_depuis_chaine()` : `texte[0]`, `int(texte[1:])`, `try/except` — `logique.py`
+- [x] 2 joueurs : J1 (drones), J2 (tempêtes) — `console.py`
+- [x] Écriture fichier `partie.log` (mode `"a"`) — `logger.py`
+- [x] Écriture `resultats.txt` (mode `"w"`) — `logger.py`
+- [x] `with open(..., encoding="utf-8")` — `logger.py`
+- [x] Graphe de dépendances, ordre d'intégration — `09_assemblage_final.md`
+
+---
+
+## Bonnes pratiques transversales
+
+- [x] Convention PEP 8 : snake_case, MAJUSCULES constantes
+- [x] Commentaires et docstrings
+- [x] Fonctions courtes et réutilisables (une fonction = une responsabilité)
+- [x] Pas de valeurs magiques : tout dans `config.json`
+- [x] DRY : fonctions factory pour éviter la duplication des dicts
+- [x] `None` comme sentinelle plutôt que `0` ou `""`
 
 ---
 
 ## Récapitulatif par fichier du jeu
 
-| Fichier         | Concepts clés mis en œuvre |
-|-----------------|----------------------------|
-| `config.py`     | Variables, constantes, types de base |
-| `modeles.py`    | Classes, `__init__`, méthodes spéciales, `@classmethod`, annotations, sets, listes |
-| `logique.py`    | Fonctions, tuples de retour, aléatoire, sets, boucles, conditions, imports |
-| `affichage.py`  | Chaînes, f-strings, formatage, ANSI, `shutil`, listes de listes, `re` |
-| `console.py`    | `input()`, boucle `while`, `break`/`continue`, dictionnaires, pattern commande |
-| `logger.py`     | Fichiers, `open`/`write`/`flush`, `with`, variable globale, gestion d'erreurs |
-| `main.py`       | `argparse`, `sys`, `os`, `if __name__`, imports conditionnels, fonctions orchestratrices |
+| Fichier | Concepts clés mis en œuvre |
+|---------|----------------------------|
+| `config.json` | JSON, source de vérité de toutes les constantes |
+| `config.py` | `json.load()`, `FileNotFoundError`, constantes |
+| `logique.py` | Fonctions factory, dicts, sets, `random`, règles officielles |
+| `affichage.py` | Grille 2D, formatage, boucles, `os.system` |
+| `console.py` | `input()`, boucle while, 2 joueurs, parser→valider→exécuter |
+| `logger.py` | `open()` / `write()`, modes `"a"`/`"w"`, `with`, UTF-8 |
+| `main.py` | `if __name__`, imports, appel `boucle_de_jeu()` |
 
 ---
 
-*Référentiel généré le 2026-03-30 — à mettre à jour si le code du jeu évolue.*
+*Référentiel mis à jour le 2026-03-30 suite à la refonte dicts + règles officielles.
+Aligné sur `Projet_Drones_G4.pdf`.*

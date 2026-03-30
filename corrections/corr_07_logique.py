@@ -1,210 +1,193 @@
 # =============================================================================
 # CORRECTION 07 — Logique de jeu
-# Module correspondant : cours/07_logique_de_jeu.md
-# Convention : colonne str 'A'..'L', ligne int 1-based 1..12
+# =============================================================================
+# Toutes les entités sont des dictionnaires. Pas de classes.
 # =============================================================================
 
 import random
 
 
-# -----------------------------------------------------------------------------
-# CORRECTION 0 — Helpers utilisés dans ce module
-# -----------------------------------------------------------------------------
-# Ces fonctions représentent la convention pédagogique du projet :
-#   colonne : str lettre 'A'..'L'
-#   ligne   : int 1-based 1..12
-# Elles sont cohérentes avec cours/03 et cours/07.
-# -----------------------------------------------------------------------------
+# --- utilitaire partagé ----------------------------------------------------- #
 
-def distance_chebyshev(col1: str, lig1: int, col2: str, lig2: int) -> int:
-    """Distance de Chebyshev entre deux cases (diagonal = 1 pas)."""
-    return max(abs(ord(col1) - ord(col2)), abs(lig1 - lig2))
-
-
-def coord_valide(colonne: str, ligne: int, taille: int = 12) -> bool:
-    """True si la coordonnée est dans la grille."""
-    return 'A' <= colonne <= chr(ord('A') + taille - 1) and 1 <= ligne <= taille
+def distance_chebyshev(col1, lig1, col2, lig2):
+    return max(abs(col2 - col1), abs(lig2 - lig1))
 
 
 # -----------------------------------------------------------------------------
-# CORRECTION 1 — Valider un mouvement de drone
-# -----------------------------------------------------------------------------
-# Ordre des vérifications : déplacements restants → HS → bloqué → grille → distance.
-# On retourne (False, motif) dès qu'une règle est violée, (True, "") si tout est OK.
-# Le drone expose : colonne str, ligne int, batterie int, bloque int, survivant.
+# EXERCICE 1 — Valider un mouvement de drone
 # -----------------------------------------------------------------------------
 
-def valider_mouvement_drone(
-    drone,
-    col_cible: str, lig_cible: int,
-    depl_restants: int,
-    taille: int = 12
-) -> tuple:
+def valider_mouvement(drone, col_c, lig_c, etat, depl_restants):
     """
-    Valide le déplacement du drone vers (col_cible, lig_cible).
-    Retourne (bool, message_erreur).
+    Vérifie les 5 règles dans l'ordre.
+    Retourne (True, "") ou (False, "message").
     """
+    # Règle 1 : distance == 1
+    if distance_chebyshev(drone["col"], drone["lig"], col_c, lig_c) != 1:
+        return False, "distance > 1"
+    # Règle 2 : drone actif
+    if drone["hors_service"]:
+        return False, "hors service"
+    # Règle 3 : drone non bloqué
+    if drone["bloque"] > 0:
+        return False, f"bloqué ({drone['bloque']} tours)"
+    # Règle 4 : pas de bâtiment
+    if (col_c, lig_c) in etat["batiments"]:
+        return False, "bâtiment"
+    # Règle 5 : déplacements restants
     if depl_restants <= 0:
-        return False, 'plus de déplacements ce tour'
-    if drone.batterie == 0:
-        return False, 'drone HS'
-    if drone.bloque > 0:
-        return False, f'drone bloqué ({drone.bloque} tours restants)'
-    if not coord_valide(col_cible, lig_cible, taille):
-        return False, 'case hors grille'
-    if distance_chebyshev(drone.colonne, drone.ligne, col_cible, lig_cible) != 1:
-        return False, 'distance invalide (> 1 case)'
-    return True, ''
+        return False, "plus de déplacements"
+    return True, ""
 
 
-# Tests
-if __name__ == '__main__':
-    class DroneFictif:
-        colonne = 'B'; ligne = 3; batterie = 8; bloque = 0; survivant = None
+if __name__ == "__main__":
+    etat_test = {"batiments": [(2, 3), (5, 1)]}
+    drone = {"id": "D1", "col": 1, "lig": 2,
+             "batterie": 8, "hors_service": False, "bloque": 0}
 
-    d = DroneFictif()
-    print(valider_mouvement_drone(d, 'C', 3, 3))   # (True, '')
-    print(valider_mouvement_drone(d, 'D', 5, 3))   # (False, 'distance invalide...')
-    print(valider_mouvement_drone(d, 'C', 3, 0))   # (False, 'plus de déplacements...')
-    d.batterie = 0
-    print(valider_mouvement_drone(d, 'C', 3, 3))   # (False, 'drone HS')
+    ok, msg = valider_mouvement(drone, 2, 2, etat_test, 3)
+    assert ok is True and msg == "", f"attendu True, got {ok} {msg}"
+
+    ok, msg = valider_mouvement(drone, 2, 3, etat_test, 3)
+    assert ok is False and "bâtiment" in msg
+
+    ok, msg = valider_mouvement(drone, 5, 5, etat_test, 3)
+    assert ok is False and "distance" in msg
+
+    ok, msg = valider_mouvement(drone, 2, 2, etat_test, 0)
+    assert ok is False and "déplacements" in msg
+
+    drone_hs = dict(drone)
+    drone_hs["hors_service"] = True
+    ok, msg = valider_mouvement(drone_hs, 2, 2, etat_test, 3)
+    assert ok is False and "service" in msg
+    print("Ex1 OK")
 
 
 # -----------------------------------------------------------------------------
-# CORRECTION 2 — Exécuter un mouvement (collecte, livraison, blocage)
-# -----------------------------------------------------------------------------
-# Séquence : déplacer → consommer batterie → vérifier tempête → survivant → hôpital.
-# On retourne une liste d'événements (tuples) pour que la vue les affiche.
-# Jamais de print() ici : la logique ne gère pas l'affichage.
+# EXERCICE 2 — Calculer le coût batterie
 # -----------------------------------------------------------------------------
 
-def executer_mouvement(drone, col_cible: str, lig_cible: int, etat) -> list:
+def calculer_cout(drone, col_c, lig_c, etat):
     """
-    Déplace le drone (mouvement déjà validé), applique les effets.
-    etat : objet avec .tempetes, .survivants, .hopital (colonne+ligne), .score
-    Retourne la liste des événements survenus.
+    Retourne le coût net (négatif = dépense, positif = recharge).
     """
-    evenements = []
-    drone.colonne = col_cible
-    drone.ligne   = lig_cible
+    cout = -1                                     # base : -1
+    if drone["survivant"] is not None:
+        cout -= 1                                  # avec survivant : -2 total
+    if (col_c, lig_c) in etat["zones_x"]:
+        cout -= 2                                  # zone X : -2 supplémentaire
+    if (col_c, lig_c) == etat["hopital"]:
+        cout += 3                                  # hôpital : +3 recharge
+    return cout
+    # La batterie ne peut pas descendre sous 0 — appliqué dans executer_mouvement.
 
-    # Tempête sur la case d'arrivée ? → blocage, pas de consommation batterie
-    tempete = next(
-        (t for t in etat.tempetes if t.colonne == col_cible and t.ligne == lig_cible),
-        None
-    )
-    if tempete:
-        drone.bloque = 2
-        evenements.append(('BLOQUE', drone.identifiant, tempete.identifiant))
-    else:
-        drone.batterie = max(0, drone.batterie - 1)
 
-    # Survivant libre sur la case ? → chargement automatique
-    surv = next(
-        (s for s in etat.survivants
-         if s.etat == 'en_attente' and s.colonne == col_cible and s.ligne == lig_cible),
-        None
-    )
-    if surv and drone.survivant is None:
-        drone.survivant = surv
-        surv.etat = 'porte'
-        evenements.append(('CHARGE', drone.identifiant, surv.identifiant))
+if __name__ == "__main__":
+    etat2 = {"hopital": (0, 7), "zones_x": {(4, 4)}}
+    drone_libre  = {"survivant": None}
+    drone_charge = {"survivant": "S1"}
 
-    # Hôpital + drone porte un survivant → livraison + recharge
-    if (col_cible == etat.hopital.colonne and lig_cible == etat.hopital.ligne
-            and drone.survivant):
-        s = drone.survivant
-        s.etat = 'sauve'
-        drone.survivant = None
-        etat.score += 1
-        drone.batterie = drone.batterie_max
-        evenements.append(('LIVRAISON', drone.identifiant, s.identifiant))
-
-    return evenements
+    assert calculer_cout(drone_libre,  1, 0, etat2) == -1
+    assert calculer_cout(drone_charge, 1, 0, etat2) == -2
+    assert calculer_cout(drone_libre,  4, 4, etat2) == -3
+    assert calculer_cout(drone_charge, 4, 4, etat2) == -4
+    assert calculer_cout(drone_charge, 0, 7, etat2) == 1   # -2 + 3
+    print("Ex2 OK")
 
 
 # -----------------------------------------------------------------------------
-# CORRECTION 3 — Propagation d'une tempête
-# -----------------------------------------------------------------------------
-# 4 directions orthogonales. On filtre hors grille et cases protégées.
-# Chaque voisin éligible est transformé en X avec probabilité proba.
-# Convention : tempête.colonne str, tempête.ligne int.
+# EXERCICE 3 — Propager les zones X
 # -----------------------------------------------------------------------------
 
-def propager_tempete(tempete, etat, proba: float = 0.3) -> list:
+def propager_zones_x(etat, proba=0.3):
     """
-    Propage la tempête orthogonalement.
-    Retourne la liste des tuples (colonne, ligne) nouvellement affectés.
+    Propage orthogonalement les zones X.
+    Retourne la liste des nouvelles positions ajoutées.
     """
+    taille     = len(etat["grille"])
+    batiments  = set(etat["batiments"])  # set pour test O(1)
+    hopital    = etat["hopital"]
+    # Positions des survivants encore en attente (ne se propagent pas dessus)
+    surv_pos   = {(s["col"], s["lig"])
+                  for s in etat["survivants"].values()
+                  if s["etat"] == "en_attente"}
+
     nouvelles = []
-    COLS = [chr(ord('A') + i) for i in range(12)]
-    i_col = ord(tempete.colonne) - ord('A')
-
-    for dcol, dlig in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-        nc = i_col + dcol
-        nl = tempete.ligne + dlig
-        if not (0 <= nc < 12 and 1 <= nl <= 12):
-            continue
-        col_v = COLS[nc]
-        # Case protégée : hôpital
-        if col_v == etat.hopital.colonne and nl == etat.hopital.ligne:
-            continue
-        if random.random() < proba:
-            nouvelles.append((col_v, nl))
-
+    for (zc, zl) in list(etat["zones_x"]):  # copie pour éviter RuntimeError
+        for dc, dl in ((0, -1), (0, 1), (-1, 0), (1, 0)):  # 4 directions ortho
+            nc, nl = zc + dc, zl + dl
+            if not (0 <= nc < taille and 0 <= nl < taille):
+                continue   # hors grille
+            cand = (nc, nl)
+            if cand in batiments or cand == hopital or cand in surv_pos:
+                continue   # cases protégées
+            if cand in etat["zones_x"]:
+                continue   # déjà une zone X
+            if random.random() < proba:
+                etat["zones_x"].add(cand)
+                nouvelles.append(cand)
     return nouvelles
 
 
-# Tests (proba=1.0 pour résultat déterministe)
-if __name__ == '__main__':
-    class Hopital:
-        colonne = 'A'; ligne = 12
-
-    class Tempete:
-        identifiant = 'T1'; colonne = 'F'; ligne = 6
-
-    class EtatSimple:
-        tempetes   = []
-        survivants = []
-        hopital    = Hopital()
-        score      = 0
-
-    t = Tempete()
-    e = EtatSimple()
-    nouvelles = propager_tempete(t, e, proba=1.0)
-    print(sorted(nouvelles))  # [('E',6), ('F',5), ('F',7), ('G',6)]
+if __name__ == "__main__":
+    random.seed(42)
+    etat3 = {
+        "zones_x"   : {(4, 4)},
+        "batiments" : [(4, 3)],
+        "hopital"   : (0, 7),
+        "survivants": {"S1": {"col": 4, "lig": 5, "etat": "en_attente"}},
+        "grille"    : [['.'] * 8 for _ in range(8)],
+    }
+    nouvelles = propager_zones_x(etat3, proba=1.0)
+    assert sorted(nouvelles) == [(3, 4), (5, 4)]
+    assert sorted(etat3["zones_x"]) == [(3, 4), (4, 4), (5, 4)]
+    print("Ex3 OK")
 
 
 # -----------------------------------------------------------------------------
-# CORRECTION 4 — Vérifier la fin de partie
-# -----------------------------------------------------------------------------
-# Ordre de priorité : VICTOIRE → DEFAITE_DRONES → DEFAITE_TOURS → EN_COURS.
-# drone.batterie int, drone.survivant : None ou objet.
+# EXERCICE 4 — Vérifier la fin de partie
 # -----------------------------------------------------------------------------
 
-def verifier_fin_partie(
-    tour_actuel: int, tour_max: int,
-    drones: list, nb_survivants_restants: int
-) -> str:
+def verifier_fin_partie(etat):
     """
-    Retourne : 'VICTOIRE', 'DEFAITE_TOURS', 'DEFAITE_DRONES', ou 'EN_COURS'.
+    Retourne "VICTOIRE", "DEFAITE_TOURS", "DEFAITE_DRONES" ou "EN_COURS".
+    all() retourne True si l'itérable est vide — sécurisé ici car
+    on ne lance jamais une partie avec 0 survivant ni 0 drone.
     """
-    if nb_survivants_restants == 0:
-        return 'VICTOIRE'
-    if all(d.batterie == 0 for d in drones):
-        return 'DEFAITE_DRONES'
-    if tour_actuel >= tour_max:
-        return 'DEFAITE_TOURS'
-    return 'EN_COURS'
+    # Victoire d'abord : tous les survivants sont sauvés
+    if all(s["etat"] == "sauve" for s in etat["survivants"].values()):
+        return "VICTOIRE"
+    # Défaite tours : tour dépasse le maximum
+    if etat["tour"] > etat["tour_max"]:
+        return "DEFAITE_TOURS"
+    # Défaite drones : tous hors service
+    if all(d["hors_service"] for d in etat["drones"].values()):
+        return "DEFAITE_DRONES"
+    return "EN_COURS"
 
 
-# Tests
-if __name__ == '__main__':
-    class DS:
-        def __init__(self, bat): self.batterie = bat
-
-    drones_ok = [DS(10), DS(5), DS(0)]
-    print(verifier_fin_partie(5,  20, drones_ok, 3))   # EN_COURS
-    print(verifier_fin_partie(5,  20, drones_ok, 0))   # VICTOIRE
-    print(verifier_fin_partie(20, 20, drones_ok, 3))   # DEFAITE_TOURS
-    print(verifier_fin_partie(5,  20, [DS(0), DS(0)], 3))  # DEFAITE_DRONES
+if __name__ == "__main__":
+    etat4 = {
+        "tour"     : 5,
+        "tour_max" : 20,
+        "survivants": {
+            "S1": {"etat": "sauve"},
+            "S2": {"etat": "en_attente"},
+        },
+        "drones": {
+            "D1": {"hors_service": False},
+            "D2": {"hors_service": False},
+        },
+    }
+    assert verifier_fin_partie(etat4) == "EN_COURS"
+    etat4["survivants"]["S2"]["etat"] = "sauve"
+    assert verifier_fin_partie(etat4) == "VICTOIRE"
+    etat4["survivants"]["S2"]["etat"] = "en_attente"
+    etat4["tour"] = 21
+    assert verifier_fin_partie(etat4) == "DEFAITE_TOURS"
+    etat4["tour"] = 5
+    etat4["drones"]["D1"]["hors_service"] = True
+    etat4["drones"]["D2"]["hors_service"] = True
+    assert verifier_fin_partie(etat4) == "DEFAITE_DRONES"
+    print("Ex4 OK")

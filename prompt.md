@@ -1,18 +1,20 @@
-Voici le prompt de reprise complet, prêt à coller dans n'importe quelle IA :
+# Prompt de reprise — drone-rescue-python
 
-***
+Colle ce prompt dans n'importe quelle IA pour reprendre le projet sans perte d'information.
+
+---
 
 ```
 ## Contexte — projet drone-rescue-python
 
-Tu reprends un projet pédagogique Python entièrement spécifié.
-Voici ce qui a déjà été décidé — respecte-le scrupuleusement.
+Tu reprends un projet pédagogique Python entièrement spécifié et partiellement réalisé.
+Voici ce qui a été décidé et codé — respecte-le scrupuleusement.
 
 ---
 
 ### Objectif
 Créer le repo GitHub `drone-rescue-python` (public) contenant :
-1. Un cours complet en 9 modules (cours/)
+1. Un cours Python en 9 modules + annexes (cours/)
 2. Des exercices avec énoncés séparés des corrections (exercices/ + corrections/)
 3. Le jeu jouable en console Python (jeu/)
 
@@ -20,209 +22,186 @@ Créer le repo GitHub `drone-rescue-python` (public) contenant :
 
 ### Profil apprenant
 - Débutant en Python
-- Connaît : variables, structures de base, for/while, if, initialisation de fonctions
-- A déjà utilisé : numpy, random (bases seulement)
+- Connaît : variables, structures de base, for/while, if, fonctions simples
 - Pas d'expérience en I/O fichiers, modules, classes
 - Travaille seul, deadline dans 6 semaines
-- Veut : fiches, notebooks Jupyter ET exercices interactifs
 
 ---
 
-### Structure du repo validée
+### Branche de travail
+`refonte/dicts-regles-officiel` — merge dans `main` uniquement quand tout est validé.
+Ne jamais pousser directement sur `main`.
+
+---
+
+### Décisions architecturales clés (DÉFINITIVES)
+
+1. **Pas de POO** : `modeles.py` est supprimé. Toutes les entités sont des **dictionnaires**.
+2. **config.json** : tous les paramètres sont dans un fichier JSON externe lu par `config.py`.
+3. **Pas d'argparse** : `main.py` lance le jeu directement, sans arguments CLI.
+4. **Pas de codes ANSI** : `affichage.py` utilise uniquement `print()` et le formatage de chaînes.
+5. **Pas de `re`** : le parsing des commandes utilise des opérations de chaîne simples.
+6. **2 joueurs humains** : J1 pilote les drones, J2 pilote les tempêtes.
+
+---
+
+### Structure du repo (state actuel ✅)
 
 ```
 drone-rescue-python/
 ├── README.md
+├── CHANTIER_CODE.md          ← suivi du chantier (phases 1-7 terminées)
+├── REFERENTIEL_ENSEIGNEMENTS.md
+├── prompt.md                  ← ce fichier
 ├── cours/
 │   ├── 00_introduction.md
 │   ├── 01_structures_de_base.md
 │   ├── 02_boucles_et_conditions.md
 │   ├── 03_fonctions.md
 │   ├── 04_modules_et_io.md
-│   ├── 05_classes_et_objets.md
+│   ├── 05_dictionnaires_avances.md    ← remplace 05_classes_et_objets.md
 │   ├── 06_grille_et_affichage.md
 │   ├── 07_logique_de_jeu.md
 │   ├── 08_console_et_log.md
-│   └── 09_assemblage_final.md   ← annexe : notice d'assemblage
+│   ├── 09_assemblage_final.md
+│   └── annexe_formatage.md            ← f-strings avancés
 ├── exercices/
 │   ├── ex_01_structures.py
 │   ├── ex_02_boucles.py
 │   ├── ex_03_fonctions.py
 │   ├── ex_04_io.py
-│   ├── ex_05_classes.py
+│   ├── ex_05_dicts_avances.py         ← remplace ex_05_classes.py
 │   ├── ex_06_grille.py
 │   ├── ex_07_logique.py
 │   └── ex_08_console.py
 ├── corrections/
-│   ├── corr_01_structures.py
-│   └── ... (un fichier par module)
+│   └── corr_0X_*.py  (un par module)
 └── jeu/
-    ├── config.py
-    ├── modeles.py
-    ├── affichage.py
-    ├── console.py
-    ├── logique.py
-    ├── logger.py
-    └── main.py
+    ├── config.json      ← source de vérité de tous les paramètres
+    ├── config.py        ← lit config.json, expose les constantes
+    ├── logique.py       ← creer_*() + toutes les règles
+    ├── affichage.py     ← rendu console, sans ANSI
+    ├── console.py       ← boucle de jeu, 2 joueurs
+    ├── logger.py        ← partie.log + resultats.txt
+    └── main.py          ← point d'entrée, sans argparse
 ```
 
 ---
 
-### Règles du jeu validées
-
-**Grille**
-- 12×12 cases, coordonnées col(A-L) + ligne(1-12)
-- Cases : `.` vide, `B` bâtiment, `H` hôpital (unique, A12), `S` survivant, `D` drone (D1-D6), `T` tempête (T1-T4), `X` zone dangereuse
-- 1 bâtiment max / case, 1 survivant max / case
-- Plusieurs drones peuvent occuper la même case simultanément
-
-**Drones**
-- 6 drones (D1..D6), identifiants uniques
-- Batterie : max paramétrable (défaut 20), initiale paramétrable (défaut 10)
-- Déplacement diagonal autorisé (distance Chebyshev = 1 max par mouvement)
-- 3 déplacements max par tour
-- Si tempête sur la case du drone : drone immobilisé, batterie non consommée, survivant porté conservé
-- Rechargeable à l'hôpital (plusieurs drones simultanément, sans limite)
-- Drone HS si batterie = 0
-
-**Tempêtes**
-- 4 tempêtes (T1..T4), identifiants uniques
-- Déplacement diagonal autorisé
-- 2 déplacements max par tour
-- Ne peuvent pas se déplacer sur l'hôpital
-- Propagation (zones X) : pas en diagonal, pas sur bâtiment ni hôpital, pas sur un survivant
-  - Propagation tous les 2 tours
-  - Probabilité de propagation paramétrable
-
-**Zones dangereuses X**
-- Nombre paramétrable (défaut 2)
-- Propagation tous les 2 tours, probabilité paramétrable
-- Pas en diagonal, pas sur bâtiment, hôpital, survivant
-
-**Fin de partie** : victoire (tous survivants livrés) OU défaite (tour max atteint ou plus de drones actifs)
-
----
-
-### Interface console validée
-
-**Affichage principal (3 zones côte à côte)**
-
-```
-DRONE RESCUE  ·  Tour N/20  ·  Phase: DRONES  ·  Joueur 1
-────────────────────────────────────────────────────────────
-     A   B   C   D   E   F  ...         CONSOLE
-  1  .   .   B   .   .   S  ...     ─────────────────────
-  2  .   D   .   .   .   .  ...     > D3
-  ...                               [D3] pos. B7 sélect.
- 12  H   .   .   B   .   .  ...     > E6
-                                      Cible E6 ✓ valide
-                                    > ok
-                                      D3→E6  bat.6→5
-                                    > next
-
- DRONES                               TEMPÊTES
- ID   Pos   Bat    Surv  Blq          ID   Pos
- D1   A1    10/20   —     —           T1   J2
- D2   D5     8/20  S3     —           T2   E6
- D3   E6     5/20   —    2t           T3   K11
- D6   F12    0/20   —    HS
-
- Score 3  ·  Surv. rest. 7  ·  Zones X 2  ·  Tour 4/20
-
- HISTORIQUE (scroll)
- T01 P1 D  D2 A1→B2  bat:10→9  surv:—
- T02 P1 D  D4 F8→E7  bat:9→8   surv:S3  LIVRAISON +1pt
- T04 P1 D  D2 D5→D5  BLOQUÉ(T2) bat:—  surv:S3
- T04 P1 T  T2 E6→E6  PROPAGATION→F6
-```
-
-**Format ligne de log (identique écran et fichier .log)**
-```
-T[nn] P[n] [D|T]  [ID] [départ]→[arrivée]  bat:[x→y]  surv:[id|—]  [ÉVÈNEMENT]
-```
-Exemples :
-```
-T04 P1 D  D3 B7→E6    bat:6→5    surv:—
-T04 P1 D  D2 D5→D5    BLOQUÉ(T2) bat:—   surv:S3
-T04 P1 T  T1 J2→K2
-T04 P1 T  T2 E6→E6    PROPAGATION→F6
-T05 P1 D  D4 E7→A12   bat:5→4    surv:S3  LIVRAISON +1pt
-T05 P1 D  D6 F12→—    bat:0      HS
-```
-
-**Séquence de pilotage console**
-1. Saisir `D[1-6]` ou `T[1-4]` → entité sélectionnée, case surlignée
-2. Saisir coordonnées cible (ex. `E6`) → validation (distance, batterie, blocage)
-3. Saisir `ok` pour exécuter, ou corriger
-4. Répéter (3x drone / 2x tempête)
-5. Saisir `next` pour passer au tour suivant
-
----
-
-### Fichiers jeu/ — architecture interne
+### Structure des entités (dictionnaires)
 
 ```python
-# config.py — tous les paramètres en variables nommées
-GRILLE_TAILLE = 12
-NB_DRONES = 6
-NB_TEMPETES = 4
-NB_BATIMENTS = 20
-NB_SURVIVANTS = 10
-BATTERIE_MAX = 20
-BATTERIE_INIT = 10
-PROBA_PROPAGATION = 0.3
-MAX_DEPL_DRONE = 3
-MAX_DEPL_TEMPETE = 2
-NB_TOURS_MAX = 20
-NB_ZONES_DANGER = 2
+# Drone
+drone = {
+    "id"          : "D1",
+    "col"         : 0,           # int, 0-basé
+    "lig"         : 5,           # int, 0-basé
+    "batterie"    : 10,
+    "batterie_max": 20,
+    "survivant"   : None,        # None ou "S1"
+    "bloque"      : 0,           # nb tours bloqué
+    "hors_service": False,
+    "dx"          : 0,           # direction (rebond)
+    "dy"          : 0,
+}
 
-# modeles.py — classes : Drone, Tempete, Survivant, Batiment, Hopital, Grille, EtatJeu
-# logique.py — fonctions : valider_mouvement, executer_mouvement,
-#               propager_tempetes, appliquer_blocages, verifier_fin_partie, recharger_drone
-# affichage.py — fonctions : render_grille, render_drones, render_tempetes,
-#                render_score, render_historique, render_console
-# console.py — fonctions : boucle_saisie, parser_commande, afficher_prompt
-# logger.py  — fonctions : log_action(texte) → écrit simultanément en mémoire + fichier .log
-# main.py    — fonctions : initialiser_partie, boucle_principale
+# Survivant
+survivant = {
+    "id"  : "S1",
+    "col" : 3,
+    "lig" : 7,
+    "etat": "en_attente",    # en_attente | embarque | sauve
+}
+
+# Tempête
+tempete = {
+    "id" : "T1",
+    "col": 8,
+    "lig": 3,
+    "dx" : 1,
+    "dy" : 1,
+}
+
+# Zones dangereuses : set de tuples
+zones_x = {(3, 5), (7, 8)}
+
+# État global
+etat = {
+    "tour"        : 1,
+    "score"       : 0,
+    "partie_finie": False,
+    "victoire"    : False,
+    "grille"      : [['.'] * TAILLE for _ in range(TAILLE)],
+    "hopital"     : (0, 7),
+    "batiments"   : [(2, 3), (5, 1)],   # liste de tuples
+    "drones"      : {"D1": {...}, ...},
+    "tempetes"    : {"T1": {...}, ...},
+    "survivants"  : {"S1": {...}, ...},
+    "zones_x"     : {(3, 5), (7, 8)},
+    "historique"  : [],
+}
 ```
 
 ---
 
-### Contenu attendu pour chaque fichier de cours
+### Règles officielles du jeu (`Projet_Drones_G4.pdf`)
 
-Chaque fichier cours/0X_*.md doit contenir :
-- Explication claire du concept (niveau débutant)
-- Lien explicite avec le projet Drone Rescue (exemple concret tiré du jeu)
-- Encadrés **Tips** et **Best practices**
-- Renvois vers documentation officielle (docs.python.org)
-- **Prompts IA** : phrases prêtes à copier pour approfondir avec une IA
+| Règle | Valeur |
+|-------|--------|
+| Déplacements J1 par tour | 3 max (1 par drone) |
+| Déplacements J2 par tour | 2 max (1 par tempête) |
+| Coût déplacement seul | −1 batterie |
+| Coût avec survivant embarqué | −2 batterie |
+| Supplément zone X | −2 batterie |
+| Recharge hôpital | +3 par tour sur place |
+| Blocage tempête | 2 tours |
+| Propagation zones X | tous les 3 tours, 30% |
+| Phase météo | 50% de chance/tempête |
+| Fin partie victoire | Tous les survivants "sauve" |
+| Fin partie défaite | Tours max atteint OU tous drones HS |
+
+---
+
+### Contenu attendu pour chaque fichier
+
+**Cours `cours/0X_*.md`**
+- Explication niveau débutant
+- Lien explicite avec le jeu (exemple du code réel)
+- Erreurs classiques encadrées
+- Résumé tableau en fin
+- Prompts IA prêts à copier
 - Référence aux exercices correspondants
 
-Chaque fichier exercices/ex_0X_*.py doit contenir :
-- Énoncés sous forme de commentaires Python détaillés
+**Exercices `exercices/ex_0X_*.py`**
+- Énoncés en commentaires
 - Squelettes de fonctions à compléter
-- Tests simples à la fin pour vérifier (assert ou print)
+- Tests avec `print()` ou `assert` en bas du fichier
 
-Chaque fichier corrections/corr_0X_*.py doit contenir :
+**Corrections `corrections/corr_0X_*.py`**
 - Code complet et fonctionnel
-- Commentaires pédagogiques expliquant les choix
-
-Le fichier cours/09_assemblage_final.md est l'annexe globale :
-- Ordre d'intégration des modules jeu/
-- Schéma de dépendances entre fichiers
-- Instructions `python main.py`
-- Checklist de rendu étudiant
-- Comment étendre le jeu (ajouter entité, modifier règle)
+- Commentaires pédagogiques
 
 ---
 
-### Ta mission
+### État d'avancement
 
-Produis l'intégralité du contenu — tous les fichiers listés ci-dessus — avec le code complet, les cours complets, les exercices et les corrections. Ne tronque rien, ne mets pas de placeholder. Chaque fichier doit être prêt à être poussé directement dans le repo GitHub `drone-rescue-python`.
+| Élément | Statut |
+|---------|--------|
+| Code `jeu/` (phases 1-7) | ✅ Terminé |
+| Cours 00 à 09 + annexe formatage | ✅ Terminé |
+| `REFERENTIEL_ENSEIGNEMENTS.md` | ✅ Mis à jour |
+| `CHANTIER_CODE.md` | ✅ Mis à jour |
+| `prompt.md` | ✅ Ce fichier |
+| Exercices `exercices/` | ⬜ À créer (ex_05 à renommer + ex_05 dicts) |
+| Corrections `corrections/` | ⬜ À créer |
+| Merge `refonte/dicts-regles-officiel` → `main` | ⬜ Dernière étape |
 
-Commence par `README.md`, puis `cours/00_introduction.md`, puis les modules dans l'ordre, puis `jeu/config.py` et les fichiers jeu/ dans l'ordre des dépendances (modeles → logique → affichage → logger → console → main), puis les exercices et corrections.
+---
+
+### Comment reprendre
+1. Lire `CHANTIER_CODE.md` (tableau des phases, état actuel)
+2. Lire ce fichier `prompt.md` pour le contexte complet
+3. Travailler uniquement sur `refonte/dicts-regles-officiel`
+4. Ne merger dans `main` qu'une fois exercices + corrections terminés
+
 ```
-
-***
-
-Tu peux coller ce prompt tel quel dans Claude, GPT-4o ou Gemini — il contient tout le contexte nécessaire pour continuer sans perte d'information.

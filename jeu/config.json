@@ -1,0 +1,15 @@
+{
+  "grille": { "lignes": 8, "colonnes": 8 },
+  "drones": { "nb_max_j1": 3, "batterie_max": 20, "batterie_depart": 10 },
+  "tempetes": { "nb_max_j2": 2, "prob_meteo": 0.5 },
+  "regles": {
+    "cout_transport_survivant": 2,
+    "cout_entree_zone_x": 2,
+    "recharge_hopital_par_tour": 3
+  },
+  "lettres": ["A","B","C","D","E","F","G","H"],
+  "directions": {
+    "N": [-1,0], "S": [1,0], "E": [0,1], "O": [0,-1],
+    "NE": [-1,1], "NO": [-1,-1], "SE": [1,1], "SO": [1,-1]
+  }
+}
