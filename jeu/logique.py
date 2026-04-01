@@ -446,11 +446,10 @@ def propager_zones_x(etat):
             etat["zones_x"].add(pos)
         positions_str = ", ".join(_pos_str(p) for p in sorted(nouvelles))
         log_ligne = (
-            f"T{etat['tour']:02d}  [X] PROPAGATION  "
-            f"+{len(nouvelles)} → {positions_str}"
+            f"T{etat['tour']:02d}  [X] +{len(nouvelles)} → {positions_str}"
         )
     else:
-        log_ligne = f"T{etat['tour']:02d}  [X] PROPAGATION  aucune extension ce tour"
+        log_ligne = f"T{etat['tour']:02d}  [X] aucune extension ce tour"
 
     _mettre_a_jour_grille(etat)
     return [log_ligne]
