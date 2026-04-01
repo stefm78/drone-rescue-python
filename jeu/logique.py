@@ -369,8 +369,8 @@ def deplacer_tempetes(etat, tempetes_exclues=None):
     Phase automatique en fin de tour.
     Chaque tempête a PROB_METEO % de chance de bouger.
     Les tempêtes dont l'id est dans `tempetes_exclues` (déjà déplacées
-    manuellement en J2 ce tour-ci) sont ignorées — elles ne bougent pas
-    deux fois dans le même tour.
+    manuellement en J2 ce tour-ci) sont ignorées silencieusement —
+    elles ne bougent pas deux fois dans le même tour et ne génèrent pas de log.
     Retourne la liste des lignes de log.
     """
     logs = []
@@ -381,9 +381,8 @@ def deplacer_tempetes(etat, tempetes_exclues=None):
         tid = tempete["id"]
         depart = (tempete["col"], tempete["lig"])
 
-        # Tempête déjà déplacée manuellement ce tour : on la saute
+        # Tempête déjà déplacée manuellement ce tour : ignorée silencieusement
         if tid in exclues:
-            logs.append(_log(etat, tid, depart, depart, evenement="SKIP (déplacée J2)"))
             continue
 
         if random.random() > PROB_METEO:
