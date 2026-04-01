@@ -248,10 +248,9 @@ def appliquer_recharges_hopital(etat, drones_recharges_ce_tour):
             drone["batterie"] + RECHARGE_HOPITAL
         )
         drones_recharges_ce_tour.add(did)
-        pos_str = _pos_str(hopital)
         logs.append(
-            f"T{etat['tour']:02d}  {did:3s}  {pos_str}→{pos_str}  "
-            f"bat:{bat_avant}→{drone['batterie']}  RECHARGE +{RECHARGE_HOPITAL} (stationnaire)"
+            f"T{etat['tour']:02d}  {did:3s}  bat +{RECHARGE_HOPITAL}  "
+            f"{bat_avant}→{drone['batterie']}"
         )
     return logs
 
