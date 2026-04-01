@@ -107,22 +107,13 @@ def render_statuts(etat):
 def render_log_col(etat, nb_lignes=20):
     """
     Retourne les dernières lignes du log dans l'ordre chronologique strict.
-    Les lignes de propagation [X] sont marquées ">>" pour les distinguer
-    visuellement, mais restent à leur position naturelle dans l'historique.
     """
     lignes_titre = ["--- LOG ---"]
     if not etat["historique"]:
         return lignes_titre + ["  (aucun mouvement)"]
 
-    # Dernières nb_lignes-1 entrées dans l'ordre d'insertion (chronologique)
     extrait = etat["historique"][-(nb_lignes - 1):]
-
-    lignes = []
-    for l in extrait:
-        prefixe = ">>" if "[X]" in l else "  "
-        lignes.append(prefixe + l)
-
-    return lignes_titre + lignes
+    return lignes_titre + ["  " + l for l in extrait]
 
 
 # ---------------------------------------------------------------------------
