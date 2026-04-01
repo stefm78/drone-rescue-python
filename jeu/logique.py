@@ -267,9 +267,14 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     du tour suivant (appliquer_recharges_hopital). Aucune recharge immédiate
     à l'arrivée.
 
+    Règle batterie insuffisante (garde-fou) :
+      - Le drone tombe HS sur sa case COURANTE (ne se déplace pas)
+      - Si un survivant est à bord, il est déposé sur la case courante du drone
+        et repasse à l'état "en_attente"
+
     Règle collision tempête :
       - Le drone SE DÉPLACE vers la case tempête
-      - La batterie est consommée normalement (avec ou sans survivant, zone X incluse)
+      - La batterie est consommée normalement
       - Le drone est bloqué 2 tours
       - Aucune livraison/prise de survivant n'a lieu
 
@@ -279,19 +284,26 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     depart = (drone["col"], drone["lig"])
     bat_avant = drone["batterie"]
 
-    # Coût de déplacement (calculé avant de savoir s'il y a une tempête)
+    # Coût de déplacement
     cout = COUT_TRANSPORT if drone["survivant"] else 1
     if cible in etat["zones_x"]:
         cout += COUT_ZONE_X
 
-    # Garde-fou : batterie insuffisante (appel direct sans validation)
+    # Garde-fou : batterie insuffisante
+    # Le drone reste sur place, HS. Le survivant éventuel est déposé sur la case.
     if drone["batterie"] < cout:
+        evenement = "HS"
+        if drone["survivant"]:
+            s = etat["survivants"][drone["survivant"]]
+            s["col"], s["lig"] = drone["col"], drone["lig"]
+            s["etat"] = "en_attente"
+            evenement = f"HS  {s['id']} déposé"
+            drone["survivant"] = None
         drone["hors_service"] = True
         _mettre_a_jour_grille(etat)
-        return _log(etat, did, depart, depart, bat_avant, drone["batterie"],
-                    "HS (batterie insuffisante en vol)")
+        return _log(etat, did, depart, depart, bat_avant, drone["batterie"], evenement)
 
-    # Consommation de la batterie (dans tous les cas, y compris collision tempête)
+    # Consommation de la batterie
     drone["batterie"] = max(0, drone["batterie"] - cout)
     drone["col"], drone["lig"] = cible
 
@@ -299,22 +311,28 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     tempete_sur_cible = _tempete_sur_case(etat, cible)
     if tempete_sur_cible:
         drone["bloque"] = 2
-        # Hors service si batterie épuisée suite au déplacement
         if drone["batterie"] <= 0:
+            # HS après déplacement : survivant déposé sur la case cible
+            evenement = f"HS+BLOQUE({tempete_sur_cible})"
+            if drone["survivant"]:
+                s = etat["survivants"][drone["survivant"]]
+                s["col"], s["lig"] = cible
+                s["etat"] = "en_attente"
+                evenement = f"HS+BLOQUE({tempete_sur_cible})  {s['id']} déposé"
+                drone["survivant"] = None
             drone["hors_service"] = True
             _mettre_a_jour_grille(etat)
-            return _log(etat, did, depart, cible, bat_avant, drone["batterie"],
-                        f"HS+BLOQUE({tempete_sur_cible})")
+            return _log(etat, did, depart, cible, bat_avant, drone["batterie"], evenement)
         _mettre_a_jour_grille(etat)
         return _log(etat, did, depart, cible, bat_avant, drone["batterie"],
                     f"BLOQUE({tempete_sur_cible})")
 
-    # Mouvement normal (pas de tempête sur la cible)
+    # Mouvement normal
     evenement = ""
     surv_id = drone["survivant"]
 
     if cible == etat["hopital"]:
-        # Livraison survivant (la recharge se fera au tour suivant)
+        # Livraison survivant
         if drone["survivant"]:
             s = etat["survivants"][drone["survivant"]]
             s["etat"] = "sauve"
@@ -330,12 +348,20 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
                 drone["survivant"] = s["id"]
                 s["etat"] = "embarque"
                 surv_id = s["id"]
-                evenement = f"PRISE {s['id']}"
+                evenement = "PRISE"
 
-    # Hors service ?
+    # Hors service (batterie tombée à 0 après mouvement normal) ?
     if drone["batterie"] <= 0:
         drone["hors_service"] = True
-        evenement = "HS"
+        if drone["survivant"]:
+            s = etat["survivants"][drone["survivant"]]
+            s["col"], s["lig"] = cible
+            s["etat"] = "en_attente"
+            evenement = f"HS  {s['id']} déposé"
+            drone["survivant"] = None
+            surv_id = None
+        else:
+            evenement = "HS"
 
     bat_apres = drone["batterie"]
     _mettre_a_jour_grille(etat)
@@ -362,9 +388,7 @@ def deplacer_tempetes(etat, tempetes_exclues=None):
     """
     Phase automatique en fin de tour.
     Chaque tempête a PROB_METEO % de chance de bouger.
-    Seuls les déplacements effectifs sont logués :
-    - tempête déjà déplacée manuellement (exclues) : silencieuse
-    - tempête immobile (tirage ou blocage géographique) : silencieuse
+    Seuls les déplacements effectifs sont logués.
     Retourne la liste des lignes de log.
     """
     logs = []
@@ -375,11 +399,8 @@ def deplacer_tempetes(etat, tempetes_exclues=None):
         tid = tempete["id"]
         depart = (tempete["col"], tempete["lig"])
 
-        # Tempête déjà déplacée manuellement ce tour : ignorée silencieusement
         if tid in exclues:
             continue
-
-        # Tirage : la tempête ne bouge pas ce tour
         if random.random() > PROB_METEO:
             continue
 
@@ -394,7 +415,6 @@ def deplacer_tempetes(etat, tempetes_exclues=None):
                 tempete["dx"] = cible[0] - depart[0]
                 tempete["dy"] = cible[1] - depart[1]
             else:
-                # Bloquée géographiquement : silencieux
                 continue
 
         tempete["col"], tempete["lig"] = cible
@@ -412,9 +432,7 @@ def deplacer_tempetes(etat, tempetes_exclues=None):
 def propager_zones_x(etat):
     """
     Tous les PROPAGATION_FREQUENCE tours, les zones X s'étendent.
-    Chaque voisin orthogonal d'une zone X existante a PROBA_PROPAGATION
-    de devenir une nouvelle zone X.
-    Retourne UNE SEULE ligne de log (préfixée [X]) avec toutes les nouvelles positions.
+    Retourne UNE SEULE ligne de log (préfixée [X]).
     """
     if etat["tour"] % PROPAGATION_FREQUENCE != 0:
         return []
@@ -439,9 +457,7 @@ def propager_zones_x(etat):
         for pos in nouvelles:
             etat["zones_x"].add(pos)
         positions_str = ", ".join(_pos_str(p) for p in sorted(nouvelles))
-        log_ligne = (
-            f"T{etat['tour']:02d}  [X] +{len(nouvelles)} → {positions_str}"
-        )
+        log_ligne = f"T{etat['tour']:02d}  [X] +{len(nouvelles)} → {positions_str}"
     else:
         log_ligne = f"T{etat['tour']:02d}  [X] aucune extension ce tour"
 
@@ -612,7 +628,7 @@ def _log(etat, identifiant, depart, arrivee,
     if bat_avant is not None and bat_apres is not None:
         parts.append(f"bat:{bat_avant}→{bat_apres}")
     if surv_id:
-        parts.append(f"[{surv_id}]")
+        parts.append(f"+ [{surv_id}]")
     if evenement:
         parts.append(evenement)
     return "  ".join(parts)
