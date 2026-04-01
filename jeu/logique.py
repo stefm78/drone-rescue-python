@@ -178,8 +178,8 @@ def initialiser_partie():
 def valider_mouvement(etat, drone, cible):
     """
     Vérifie si le drone (dict) peut se déplacer vers cible (col, lig).
-    Calcule le coût réel du déplacement AVANT de l'autoriser.
-    Note : une cible avec tempête est autorisée (le drone se déplace et est bloqué).
+    Ne contrôle PAS la batterie suffisante : ce cas est géré par executer_mouvement()
+    (HS + dépôt du survivant sur place si applicable).
     Retourne (True, "") ou (False, raison).
     """
     did = drone["id"]
@@ -195,17 +195,6 @@ def valider_mouvement(etat, drone, cible):
         return False, "Case bloquée par un bâtiment"
     if drone["batterie"] <= 0:
         return False, f"{did} n'a plus de batterie"
-    # Vérification du coût réel AVANT le déplacement
-    # (le coût s'applique même en cas de collision avec une tempête)
-    cout_reel = COUT_TRANSPORT if drone["survivant"] else 1
-    if cible in etat["zones_x"]:
-        cout_reel += COUT_ZONE_X
-    if drone["batterie"] < cout_reel:
-        return False, (
-            f"{did} batterie insuffisante "
-            f"({drone['batterie']} unité(s) disponible, {cout_reel} nécessaire(s)) "
-            f"— déplacement annulé"
-        )
     return True, ""
 
 
@@ -267,9 +256,9 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     du tour suivant (appliquer_recharges_hopital). Aucune recharge immédiate
     à l'arrivée.
 
-    Règle batterie insuffisante (garde-fou) :
+    Règle batterie insuffisante :
       - Le drone tombe HS sur sa case COURANTE (ne se déplace pas)
-      - Si un survivant est à bord, il est déposé sur la case courante du drone
+      - Si un survivant est à bord, il est déposé sur la case courante
         et repasse à l'état "en_attente"
 
     Règle collision tempête :
@@ -289,8 +278,7 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     if cible in etat["zones_x"]:
         cout += COUT_ZONE_X
 
-    # Garde-fou : batterie insuffisante
-    # Le drone reste sur place, HS. Le survivant éventuel est déposé sur la case.
+    # Batterie insuffisante : HS sur place, survivant déposé
     if drone["batterie"] < cout:
         evenement = "HS"
         if drone["survivant"]:
@@ -312,7 +300,6 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     if tempete_sur_cible:
         drone["bloque"] = 2
         if drone["batterie"] <= 0:
-            # HS après déplacement : survivant déposé sur la case cible
             evenement = f"HS+BLOQUE({tempete_sur_cible})"
             if drone["survivant"]:
                 s = etat["survivants"][drone["survivant"]]
