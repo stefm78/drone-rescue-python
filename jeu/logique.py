@@ -252,9 +252,10 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     """
     Déplace le drone vers cible, applique les règles officielles.
 
-    Règle recharge : la recharge à l'hôpital se fait UNIQUEMENT en début
-    du tour suivant (appliquer_recharges_hopital). Aucune recharge immédiate
-    à l'arrivée.
+    Convention LOG survivant :
+      + [Sx]  →  prise  (le drone vient de récupérer le survivant)
+        [Sx]  →  transport  (le drone se déplace avec survivant à bord)
+      - [Sx]  →  dépôt  (livraison hôpital, HS, HS+BLOQUE)
 
     Règle batterie insuffisante :
       - Le drone tombe HS sur sa case COURANTE (ne se déplace pas)
@@ -278,55 +279,59 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     if cible in etat["zones_x"]:
         cout += COUT_ZONE_X
 
-    # Batterie insuffisante : HS sur place, survivant déposé
+    # ── Batterie insuffisante : HS sur place ────────────────────────────────
     if drone["batterie"] < cout:
-        evenement = "HS"
+        drone["hors_service"] = True
+        surv_depose = None
         if drone["survivant"]:
             s = etat["survivants"][drone["survivant"]]
             s["col"], s["lig"] = drone["col"], drone["lig"]
             s["etat"] = "en_attente"
-            evenement = f"HS  {s['id']} déposé"
+            surv_depose = s["id"]
             drone["survivant"] = None
-        drone["hors_service"] = True
         _mettre_a_jour_grille(etat)
-        return _log(etat, did, depart, depart, bat_avant, drone["batterie"], evenement)
+        return _log(etat, did, depart, depart, bat_avant, drone["batterie"],
+                    "HS", surv_depose=surv_depose)
 
-    # Consommation de la batterie
+    # ── Consommation batterie + déplacement ────────────────────────────────
     drone["batterie"] = max(0, drone["batterie"] - cout)
     drone["col"], drone["lig"] = cible
 
-    # Collision avec une tempête sur la cible ?
+    # ── Collision avec une tempête sur la cible ────────────────────────────
     tempete_sur_cible = _tempete_sur_case(etat, cible)
     if tempete_sur_cible:
         drone["bloque"] = 2
-        if drone["batterie"] <= 0:
-            evenement = f"HS+BLOQUE({tempete_sur_cible})"
+        surv_depose = None
+        hs = drone["batterie"] <= 0
+        if hs:
+            drone["hors_service"] = True
             if drone["survivant"]:
                 s = etat["survivants"][drone["survivant"]]
                 s["col"], s["lig"] = cible
                 s["etat"] = "en_attente"
-                evenement = f"HS+BLOQUE({tempete_sur_cible})  {s['id']} déposé"
+                surv_depose = s["id"]
                 drone["survivant"] = None
-            drone["hors_service"] = True
-            _mettre_a_jour_grille(etat)
-            return _log(etat, did, depart, cible, bat_avant, drone["batterie"], evenement)
         _mettre_a_jour_grille(etat)
+        evenement = f"HS+BLOQUE({tempete_sur_cible})" if hs else f"BLOQUE({tempete_sur_cible})"
         return _log(etat, did, depart, cible, bat_avant, drone["batterie"],
-                    f"BLOQUE({tempete_sur_cible})")
+                    evenement, surv_depose=surv_depose)
 
-    # Mouvement normal
-    evenement = ""
-    surv_id = drone["survivant"]
+    # ── Mouvement normal ───────────────────────────────────────────────────
+    evenement  = ""
+    surv_prise  = None   # survivant venant d'être embarqué
+    surv_bord   = drone["survivant"]   # survivant en transport (avant livraison éventuelle)
+    surv_depose = None   # survivant venant d'être déposé
 
     if cible == etat["hopital"]:
-        # Livraison survivant
+        # Livraison
         if drone["survivant"]:
             s = etat["survivants"][drone["survivant"]]
             s["etat"] = "sauve"
             etat["score"] += 1
-            evenement = f"LIVRAISON {s['id']} +1pt"
+            surv_depose = s["id"]
+            evenement   = f"LIVRAISON +1pt"
             drone["survivant"] = None
-            surv_id = None
+            surv_bord   = None
     else:
         # Prise de survivant
         if drone["survivant"] is None:
@@ -334,25 +339,28 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
             if s:
                 drone["survivant"] = s["id"]
                 s["etat"] = "embarque"
-                surv_id = s["id"]
-                evenement = "PRISE"
+                surv_prise = s["id"]
+                surv_bord  = None   # on affiche + [Sx], pas [Sx]
 
-    # Hors service (batterie tombée à 0 après mouvement normal) ?
+    # HS après mouvement (batterie tombée à 0) ?
     if drone["batterie"] <= 0:
         drone["hors_service"] = True
         if drone["survivant"]:
             s = etat["survivants"][drone["survivant"]]
             s["col"], s["lig"] = cible
             s["etat"] = "en_attente"
-            evenement = f"HS  {s['id']} déposé"
+            surv_depose = s["id"]
             drone["survivant"] = None
-            surv_id = None
-        else:
-            evenement = "HS"
+            surv_prise = None
+            surv_bord  = None
+        evenement = "HS"
 
-    bat_apres = drone["batterie"]
     _mettre_a_jour_grille(etat)
-    return _log(etat, did, depart, cible, bat_avant, bat_apres, evenement, surv_id)
+    return _log(etat, did, depart, cible, bat_avant, drone["batterie"],
+                evenement,
+                surv_prise=surv_prise,
+                surv_bord=surv_bord,
+                surv_depose=surv_depose)
 
 
 def executer_mouvement_tempete(etat, tempete, cible):
@@ -607,15 +615,27 @@ def position_depuis_chaine(texte):
 
 
 def _log(etat, identifiant, depart, arrivee,
-         bat_avant=None, bat_apres=None, evenement="", surv_id=None):
-    """Formate une ligne de log condensée pour un mouvement."""
+         bat_avant=None, bat_apres=None, evenement="",
+         surv_prise=None, surv_bord=None, surv_depose=None):
+    """
+    Formate une ligne de log condensée pour un mouvement.
+
+    Convention survivant :
+      + [Sx]  →  prise  (surv_prise)
+        [Sx]  →  transport en cours  (surv_bord)
+      - [Sx]  →  dépôt / livraison / HS  (surv_depose)
+    """
     dep_str = _pos_str(depart)
     arr_str = _pos_str(arrivee)
     parts = [f"T{etat['tour']:02d}", f"{identifiant:3s}", f"{dep_str}→{arr_str}"]
     if bat_avant is not None and bat_apres is not None:
         parts.append(f"bat:{bat_avant}→{bat_apres}")
-    if surv_id:
-        parts.append(f"+ [{surv_id}]")
+    if surv_prise:
+        parts.append(f"+ [{surv_prise}]")
+    elif surv_bord:
+        parts.append(f"[{surv_bord}]")
+    elif surv_depose:
+        parts.append(f"- [{surv_depose}]")
     if evenement:
         parts.append(evenement)
     return "  ".join(parts)
