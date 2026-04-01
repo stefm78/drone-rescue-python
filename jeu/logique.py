@@ -228,8 +228,8 @@ def valider_mouvement_tempete(etat, tempete, cible):
 
 def appliquer_recharges_hopital(etat, drones_recharges_ce_tour):
     """
-    Recharge tous les drones dont la position courante est l'hôpital,
-    en début de phase J1 (avant tout déplacement).
+    Recharge tous les drones stationnés à l'hôpital en début de tour
+    (avant tout déplacement J1). C'est le SEUL mécanisme de recharge.
     Retourne la liste des lignes de log.
     """
     logs = []
@@ -262,6 +262,10 @@ def appliquer_recharges_hopital(etat, drones_recharges_ce_tour):
 def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     """
     Déplace le drone vers cible, applique les règles officielles.
+
+    Règle recharge : la recharge à l'hôpital se fait UNIQUEMENT en début
+    du tour suivant (appliquer_recharges_hopital). Aucune recharge immédiate
+    à l'arrivée.
 
     Règle collision tempête :
       - Le drone SE DÉPLACE vers la case tempête
@@ -310,7 +314,7 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
     surv_id = drone["survivant"]
 
     if cible == etat["hopital"]:
-        # Livraison survivant
+        # Livraison survivant (la recharge se fera au tour suivant)
         if drone["survivant"]:
             s = etat["survivants"][drone["survivant"]]
             s["etat"] = "sauve"
@@ -318,15 +322,6 @@ def executer_mouvement(etat, drone, cible, drones_recharges_ce_tour):
             evenement = f"LIVRAISON {s['id']} +1pt"
             drone["survivant"] = None
             surv_id = None
-        # Recharge
-        if did not in drones_recharges_ce_tour:
-            drone["batterie"] = min(
-                drone["batterie_max"],
-                drone["batterie"] + RECHARGE_HOPITAL
-            )
-            drones_recharges_ce_tour.add(did)
-            if not evenement:
-                evenement = f"RECHARGE +{RECHARGE_HOPITAL}"
     else:
         # Prise de survivant
         if drone["survivant"] is None:
