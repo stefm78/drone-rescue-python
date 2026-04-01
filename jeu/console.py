@@ -41,17 +41,18 @@ def boucle_de_jeu(etat):
             break
 
         # ── Phase J2 : Tempêtes (manuelle) ────────────────────────────────────
-        _phase_tempetes(etat)
+        tempetes_deplacees = _phase_tempetes(etat)
         if etat["partie_finie"]:
             break
 
         # ── Phase automatique : météo ──────────────────────────────────────────
-        logs_meteo = deplacer_tempetes(etat)
+        # Les tempêtes déjà déplacées en J2 sont exclues du tirage aléatoire.
+        logs_meteo = deplacer_tempetes(etat, tempetes_exclues=tempetes_deplacees)
         for ligne in logs_meteo:
             etat["historique"].append(ligne)
             enregistrer_log(ligne)
 
-        # Vérification fin de partie après météo (tempêtes peuvent bloquer tous les drones)
+        # Vérification fin de partie après météo
         if verifier_fin_partie(etat):
             break
 
@@ -158,6 +159,8 @@ def _phase_tempetes(etat):
     """
     Phase J2 : le joueur déplace jusqu'à MAX_DEPL_TEMPETE tempêtes.
     Chaque tempête ne peut être déplacée qu'une seule fois par tour.
+    Retourne le set des ids de tempêtes effectivement déplacées,
+    afin que la phase météo automatique les exclue.
     """
     depl_effectues = 0
     tempetes_deplacees = set()
@@ -179,7 +182,7 @@ def _phase_tempetes(etat):
 
         if saisie == 'Q':
             etat["partie_finie"] = True
-            return
+            return tempetes_deplacees
         if saisie == 'NEXT':
             break
 
@@ -211,7 +214,9 @@ def _phase_tempetes(etat):
         depl_effectues += 1
 
         if verifier_fin_partie(etat):
-            return
+            return tempetes_deplacees
+
+    return tempetes_deplacees
 
 
 def _afficher_fin(etat):
